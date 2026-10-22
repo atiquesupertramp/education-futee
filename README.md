@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Éducation Futée · Intégration des élèves (démo)
 
-## Getting Started
+Système d'intégration des nouveaux élèves d'Éducation Futée (Lecture, Écriture, Mathématiques; Tutorat et Classes Futées).
 
-First, run the development server:
+**Mode démo : aucun courriel ni SMS n'est réellement envoyé.** Chaque message est généré et enregistré tel qu'il serait envoyé, et peut être consulté dans la Boîte d'envoi.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Ce que fait l'application
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. La conseillère inscrit un élève (parent, enfant, cycle, programme, un groupe par matière, dates).
+2. Un courriel de bienvenue est généré **pour chaque matière**, à partir du gabarit du programme (Tutorat ou Classes Futées) et des informations du groupe (enseignante, plage, lien Zoom).
+3. Chaque courriel contient un bouton « Je confirme la réception ».
+4. Sans confirmation après 24 h : un rappel par courriel + un SMS (un seul par enfant).
+5. Toujours rien 24 h plus tard : la famille passe dans « À appeler » et l'adjointe reçoit une alerte.
+6. À la confirmation : courriel de remerciement, les relances s'arrêtent.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Le tableau de bord suit les confirmations, l'abonnement (actif, en pause, terminé, dates) et les groupes.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Codes de groupe
 
-## Learn More
+`[cycle][CF?]-[matière]-[numéro]`, par exemple `3CF-E-01` = 3e cycle, Classes Futées, Écriture, groupe 1. Sans `CF` = Tutorat. Matières : `L` Lecture, `E` Écriture, `M` Mathématiques. Le programme, le cycle et la matière sont déduits du code.
 
-To learn more about Next.js, take a look at the following resources:
+## Technique
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Next.js (App Router), hébergé sur Vercel
+- Supabase (Postgres) : tables `groups`, `families`, `students`, `enrollments`, `messages`, `events`, `settings`
+- Gabarits de courriels : `src/lib/emails.ts` (HTML simple + version texte)
+- Logique d'intégration et relances : `src/lib/onboarding.ts`
+- Relances quotidiennes : `/api/relances` (tâche planifiée Vercel, protégée par `CRON_SECRET`)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Variables d'environnement
 
-## Deploy on Vercel
+| Nom | Rôle |
+|---|---|
+| `SUPABASE_URL` | URL du projet Supabase |
+| `SUPABASE_KEY` | Clé Supabase (utilisée côté serveur seulement) |
+| `APP_URL` | Adresse publique de l'application (liens de confirmation, logo des courriels) |
+| `CRON_SECRET` | Secret de la tâche planifiée des relances |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Pour passer en production
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Brancher un service d'envoi (courriel et SMS) dans `recordMessage` (`src/lib/onboarding.ts`).
+- Remplacer la clé publique par une clé serveur Supabase et restreindre les politiques RLS.
+- Ajouter une connexion pour l'équipe.
