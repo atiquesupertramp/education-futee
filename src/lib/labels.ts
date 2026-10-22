@@ -8,6 +8,18 @@ export const subjectLabel: Record<Subject, string> = {
   math: "Mathématiques",
 };
 
+/** "de lecture", "d'écriture", "de mathématiques" */
+export function deSubject(s: Subject): string {
+  return s === "ecriture" ? "d'écriture" : `de ${subjectLabel[s].toLowerCase()}`;
+}
+
+/** "le cours d'écriture" or "les cours d'écriture et de mathématiques" */
+export function coursPhrase(subjects: Subject[]): string {
+  const parts = subjects.map(deSubject);
+  if (parts.length <= 1) return `le cours ${parts[0] ?? ""}`.trim();
+  return `les cours ${parts.slice(0, -1).join(", ")} et ${parts[parts.length - 1]}`;
+}
+
 export const programLabel: Record<Program, string> = {
   tutorat: "Tutorat",
   classes_futees: "Classes Futées",

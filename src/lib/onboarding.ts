@@ -1,7 +1,7 @@
 import "server-only";
 import { appUrl, db, must } from "./db";
 import type { Enrollment, Family, Group, Settings, Student } from "./types";
-import { parseGroupCode, subjectLabel } from "./labels";
+import { coursPhrase, parseGroupCode, subjectLabel } from "./labels";
 import {
   classesFuteesWelcome,
   reminderEmail,
@@ -190,13 +190,13 @@ export async function resendWelcome(enrollmentId: string) {
 
 type EnrollmentFull = Enrollment & { group: Group; student: Student & { family: Family } };
 
-export async function lookupToken(token: string): Promise<{ status: string; student: string; subject: string; code: string } | null> {
+export async function lookupToken(token: string): Promise<{ status: string; student: string; subject: string; cours: string; code: string } | null> {
   if (!/^[0-9a-f-]{36}$/i.test(token)) return null;
   const e = (await db().from("enrollments").select("status, student:students(first_name), group:groups(code, subject)").eq("confirm_token", token).maybeSingle()).data as unknown as
     | { status: string; student: { first_name: string }; group: { code: string; subject: Group["subject"] } }
     | null;
   if (!e) return null;
-  return { status: e.status, student: e.student.first_name, subject: subjectLabel[e.group.subject], code: e.group.code };
+  return { status: e.status, student: e.student.first_name, subject: subjectLabel[e.group.subject], cours: coursPhrase([e.group.subject]), code: e.group.code };
 }
 
 export async function confirmByToken(token: string, via: "bouton" | "manuel" | "reponse"): Promise<{ ok: boolean; already?: boolean; student?: string; subject?: string; code?: string }> {

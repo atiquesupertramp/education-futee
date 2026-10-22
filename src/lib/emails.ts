@@ -1,6 +1,6 @@
 import type { Group, Student } from "./types";
 import { appUrl } from "./db";
-import { cycleLabel, subjectLabel } from "./labels";
+import { coursPhrase, cycleLabel, deSubject, subjectLabel } from "./labels";
 
 /*
  * Email templates.
@@ -134,7 +134,7 @@ export function tutoratWelcome(g: Group, s: Student, confirmUrl: string): Render
 
   return build(
     "🎉 Bienvenue au tutorat Éducation Futée!",
-    `Les informations du cours de ${subjectLabel[g.subject].toLowerCase()} de ${s.first_name} (groupe ${g.code}).`,
+    `Les informations du cours ${deSubject(g.subject)} de ${s.first_name} (groupe ${g.code}).`,
     [
       { t: "p", text: "Bonjour chers parents," },
       { t: "p", text: `Nous sommes très heureux d'accueillir ${s.first_name} dans son parcours de tutorat. 💛` },
@@ -312,7 +312,7 @@ export interface PendingItem {
 export function reminderEmail(s: Student, items: PendingItem[]): RenderedEmail {
   const blocks: Block[] = [
     { t: "p", text: "Bonjour chers parents," },
-    { t: "p", text: `Nous n'avons pas encore reçu votre confirmation pour ${items.length > 1 ? "les cours" : "le cours"} de ${s.first_name}. Pour que tout soit prêt dès le premier cours, merci de confirmer que vous avez bien reçu les informations :` },
+    { t: "p", text: `Nous n'avons pas encore reçu votre confirmation pour ${coursPhrase(items.map((i) => i.group.subject))} de ${s.first_name}. Pour que tout soit prêt dès le premier cours, merci de confirmer que vous avez bien reçu les informations :` },
   ];
   for (const it of items) {
     blocks.push({
@@ -330,8 +330,7 @@ export function reminderEmail(s: Student, items: PendingItem[]): RenderedEmail {
 }
 
 export function reminderSms(s: Student, items: PendingItem[], shortLink: string): string {
-  const matieres = items.map((i) => subjectLabel[i.group.subject].toLowerCase()).join(", ");
-  return `Éducation Futée : Bonjour! Nous attendons votre confirmation pour le cours de ${matieres} de ${s.first_name}. Confirmez ici : ${shortLink} Merci! Répondez STOP pour ne plus recevoir de SMS.`;
+  return `Éducation Futée : Bonjour! Nous attendons votre confirmation pour ${coursPhrase(items.map((i) => i.group.subject))} de ${s.first_name}. Confirmez ici : ${shortLink} Merci! Répondez STOP pour ne plus recevoir de SMS.`;
 }
 
 export function thanksEmail(g: Group, s: Student): RenderedEmail {
@@ -340,7 +339,7 @@ export function thanksEmail(g: Group, s: Student): RenderedEmail {
     `Confirmation reçue : ${subjectLabel[g.subject]}, groupe ${g.code}.`,
     [
       { t: "p", text: "Bonjour chers parents," },
-      { t: "p", text: `Merci! Nous avons bien reçu votre confirmation pour le cours de **${subjectLabel[g.subject].toLowerCase()}** de ${s.first_name} (groupe ${g.code}). 💛` },
+      { t: "p", text: `Merci! Nous avons bien reçu votre confirmation pour le cours **${deSubject(g.subject)}** de ${s.first_name} (groupe ${g.code}). 💛` },
       { t: "p", text: "Prochaine étape : surveillez vos courriels pour l'invitation à la plateforme éducative (vérifiez aussi vos courriels indésirables)." },
       { t: "p", text: "Au plaisir de retrouver votre enfant en classe!" },
       { t: "p", text: "**L'équipe d'Éducation Futée**" },

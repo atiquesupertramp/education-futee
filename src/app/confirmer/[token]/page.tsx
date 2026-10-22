@@ -32,7 +32,7 @@ export default async function ConfirmPage({ params, searchParams }: { params: Pr
           <>
             <h1 className="text-2xl font-bold text-stone-900">{ok ? "Merci, c'est confirmé! 💛" : "C'est déjà confirmé!"}</h1>
             <p className="mt-3 text-stone-700">
-              Nous avons bien noté que vous avez reçu les informations du cours de <strong>{r.subject.toLowerCase()}</strong> de {r.student} (groupe {r.code}).
+              Nous avons bien noté que vous avez reçu les informations <strong>du {r.cours.replace(/^le /, "")}</strong> de {r.student} (groupe {r.code}).
             </p>
             <p className="mt-4 text-sm text-stone-500">Prochaine étape : surveillez vos courriels pour l&apos;invitation à la plateforme éducative. Vous pouvez fermer cette page.</p>
           </>
@@ -40,7 +40,7 @@ export default async function ConfirmPage({ params, searchParams }: { params: Pr
           <>
             <h1 className="text-2xl font-bold text-stone-900">Confirmez la réception</h1>
             <p className="mt-3 text-stone-700">
-              Cours de <strong>{r.subject.toLowerCase()}</strong> de {r.student} (groupe {r.code}).
+              <strong>{r.subject}</strong> pour {r.student} (groupe {r.code}).
             </p>
             <p className="mt-2 text-sm text-stone-500">En confirmant, vous nous indiquez avoir bien reçu et lu le courriel de bienvenue.</p>
             <form action={confirmAction} className="mt-6">
