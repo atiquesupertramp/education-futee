@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/auth";
 import { db, must } from "@/lib/db";
 import {
   advanceClock,
@@ -19,6 +20,7 @@ const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 export type FormState = { error?: string } | undefined;
 
 export async function createStudentAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await requireAuth();
   let id: string;
   try {
     const cycle = Number(fd.get("cycle"));
@@ -43,32 +45,38 @@ export async function createStudentAction(_prev: FormState, fd: FormData): Promi
 }
 
 export async function advanceClockAction(fd: FormData) {
+  await requireAuth();
   const hours = Number(fd.get("hours") ?? 24);
   await advanceClock(Number.isFinite(hours) && hours > 0 ? hours : 24);
   revalidatePath("/", "layout");
 }
 
 export async function runFollowupsAction() {
+  await requireAuth();
   await processDue();
   revalidatePath("/", "layout");
 }
 
 export async function confirmManualAction(fd: FormData) {
+  await requireAuth();
   await confirmByToken(str(fd, "token"), str(fd, "via") === "reponse" ? "reponse" : "manuel");
   revalidatePath("/", "layout");
 }
 
 export async function resendWelcomeAction(fd: FormData) {
+  await requireAuth();
   await resendWelcome(str(fd, "enrollment_id"));
   revalidatePath("/", "layout");
 }
 
 export async function callDoneAction(fd: FormData) {
+  await requireAuth();
   await markCallDone(str(fd, "student_id"), str(fd, "notes"));
   revalidatePath("/", "layout");
 }
 
 export async function updateMembershipAction(fd: FormData) {
+  await requireAuth();
   const id = str(fd, "student_id");
   const status = str(fd, "membership_status");
   must(
@@ -88,12 +96,14 @@ export async function updateMembershipAction(fd: FormData) {
 }
 
 export async function deleteStudentAction(fd: FormData) {
+  await requireAuth();
   must(await db().from("students").delete().eq("id", str(fd, "student_id")), "Suppression");
   revalidatePath("/", "layout");
   redirect("/eleves");
 }
 
 export async function saveGroupAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await requireAuth();
   const original = str(fd, "original_code");
   const code = str(fd, "code").toUpperCase().replace(/\s+/g, "");
   const parsed = parseGroupCode(code);
@@ -124,6 +134,7 @@ export async function saveGroupAction(_prev: FormState, fd: FormData): Promise<F
 }
 
 export async function saveSettingsAction(fd: FormData) {
+  await requireAuth();
   must(
     await db()
       .from("settings")
@@ -135,6 +146,7 @@ export async function saveSettingsAction(fd: FormData) {
 }
 
 export async function resetDemoAction() {
+  await requireAuth();
   await resetDemo();
   revalidatePath("/", "layout");
   redirect("/");

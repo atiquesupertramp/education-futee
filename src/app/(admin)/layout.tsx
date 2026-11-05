@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Nav } from "@/components/nav";
 import { db } from "@/lib/db";
 import { demoNow, getSettings } from "@/lib/onboarding";
+import { logoutAction } from "../login/actions";
 import { advanceClockAction, runFollowupsAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 <button className="btn btn-secondary py-1 text-xs" title="Exécute maintenant les relances dues">
                   Exécuter les relances
                 </button>
+              </form>
+              <form action={logoutAction}>
+                <button className="btn btn-secondary py-1 text-xs">Se déconnecter</button>
               </form>
             </div>
           </div>
