@@ -127,7 +127,7 @@ export async function saveSettingsAction(fd: FormData) {
   must(
     await db()
       .from("settings")
-      .update({ sender_email: str(fd, "sender_email"), reply_to: str(fd, "reply_to"), va_email: str(fd, "va_email"), sms_enabled: fd.get("sms_enabled") === "on" })
+      .update({ sender_email: str(fd, "sender_email"), reply_to: str(fd, "reply_to"), va_email: str(fd, "va_email"), sms_enabled: fd.get("sms_enabled") === "on", email_mode: ["simule", "test", "reel"].includes(str(fd, "email_mode")) ? str(fd, "email_mode") : "simule", test_recipients: str(fd, "test_recipients") })
       .eq("id", 1),
     "Paramètres",
   );

@@ -76,7 +76,9 @@ create table public.messages (
   subject text,
   body_html text,
   body_text text,
-  status text not null default 'simule',
+  status text not null default 'simule',  -- simule | envoye | envoye_test | echec
+  provider_id text,            -- Resend message id
+  error text,
   sent_at timestamptz not null default now()
 );
 
@@ -93,10 +95,12 @@ create table public.events (
 create table public.settings (
   id int primary key default 1 check (id = 1),
   demo_offset_hours int not null default 0,
-  sender_email text not null default 'bienvenue@demo.educationfutee.com',
+  sender_email text not null default 'bienvenue@onboarding.educationfutee.com',
   reply_to text not null default 'info@educationfutee.com',
   va_email text not null default 'info@educationfutee.com',
-  sms_enabled boolean not null default false
+  sms_enabled boolean not null default false,
+  email_mode text not null default 'simule' check (email_mode in ('simule','test','reel')),
+  test_recipients text not null default ''
 );
 insert into public.settings (id) values (1);
 
