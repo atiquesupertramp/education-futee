@@ -7,8 +7,10 @@ let client: SupabaseClient | null = null;
 export function db(): SupabaseClient {
   if (client) return client;
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_KEY;
-  if (!url || !key) throw new Error("SUPABASE_URL et SUPABASE_KEY doivent être définis.");
+  // Prefer the secret key (bypasses RLS, so the tables can be locked down).
+  // Falls back to the publishable key while the open demo policies still exist.
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_KEY;
+  if (!url || !key) throw new Error("SUPABASE_URL et SUPABASE_SECRET_KEY (ou SUPABASE_KEY) doivent être définis.");
   client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },

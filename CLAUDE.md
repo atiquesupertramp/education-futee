@@ -4,11 +4,11 @@
 
 Onboarding and membership dashboard for **Éducation Futée**, a French-language (Québec) tutoring business: Lecture, Écriture, Mathématiques, at 2e and 3e cycle, in two programs, **Tutorat** (small groups) and **Classes Futées**. Built for Atique (agency owner, Euqitech). All parent-facing and UI text is **French (Québec)**; code and comments are English.
 
-**Status: demo / test phase.** Nothing is really sent. Every email and SMS is rendered and stored in `messages` so it can be previewed in the app (Boîte d'envoi). Not live with real parents yet.
+**Status: ready for first real families.** Email goes out through Resend (`email_mode = reel`). SMS is never sent (no provider; messages are only stored). Every message is also stored in `messages` and can be previewed in Boîte d'envoi. The dashboard is behind a shared-password login. No real family has been enrolled yet.
 
 ## Where things live
 
-- **Live site:** https://education-futee.vercel.app (Vercel team `euqitech`, project `education-futee`, id `prj_pVIcxfgrpvvUgKtTyjHYEyUBVNey`). Every push to `main` deploys to production.
+- **Live site:** https://app.educationfutee.com (DNS CNAME in GoDaddy; `education-futee.vercel.app` also works). Vercel team `euqitech`, project `education-futee`, id `prj_pVIcxfgrpvvUgKtTyjHYEyUBVNey`). Every push to `main` deploys to production. Env var changes only apply to **new** deployments, so redeploy after changing one.
 - **Database:** Supabase project **Éducation Futée**, ref `uaulnbilcewbjrhjvqik`, region ca-central-1, org Euqitech. Schema reference: `supabase/schema.sql`.
 - **Daily reminders:** Vercel cron → `GET /api/relances` (see `vercel.json`), protected by `CRON_SECRET`.
 
@@ -17,9 +17,15 @@ Onboarding and membership dashboard for **Éducation Futée**, a French-language
 | Var | Notes |
 |---|---|
 | `SUPABASE_URL` | `https://uaulnbilcewbjrhjvqik.supabase.co` |
-| `SUPABASE_KEY` | Supabase publishable key, used **server-side only** (`src/lib/db.ts`, `server-only`). Never expose to the browser. |
-| `APP_URL` | Optional. Public base URL for confirmation links and the email logo. Falls back to Vercel's production URL. |
-| `CRON_SECRET` | Set in Vercel only. |
+| `SUPABASE_SECRET_KEY` | Supabase secret key (`sb_secret_...`), **server-side only**. `db()` prefers it over `SUPABASE_KEY`. Required once the open RLS policies are removed. |
+| `SUPABASE_KEY` | Supabase publishable key, fallback for `db()`. Server-side only (`server-only`). Never expose to the browser. |
+| `APP_URL` | Public base URL for confirmation links and the email logo. Production: `https://app.educationfutee.com`. |
+| `RESEND_API_KEY` | Resend key with sending access. Without it, test and real modes record an `echec`. |
+| `ADMIN_PASSWORD` | The shared staff password for the dashboard login. |
+| `AUTH_SECRET` | Random secret that signs the session cookie. Changing it logs everyone out. |
+| `CRON_SECRET` | Protects `/api/relances`. |
+
+Production env vars live in Vercel only (sensitive ones are unreadable there). Never print or commit them.
 
 Local setup: `npm install`, then `vercel env pull .env.local` (or copy the values from the Supabase dashboard), then `npm run dev`. Check before pushing: `npx tsc --noEmit && npx eslint src && npm run build`.
 
@@ -31,11 +37,15 @@ Local setup: `npm install`, then `vercel env pull .env.local` (or copy the value
 4. `processDue()` runs the follow-ups: after **24 h** without confirmation, **one reminder email per child** covering all unconfirmed subjects (+ a short SMS **only if `settings.sms_enabled`**, off by default). After another **24 h**, enrollments move to `a_appeler` (call list) and the VA (Karine) gets an alert email.
 5. On confirmation, a thank-you email goes out and follow-ups stop for that subject. Follow-ups skip students whose membership isn't `actif`.
 
-**Demo clock:** `settings.demo_offset_hours` shifts "now" (`demoNow()`). The "Avancer de 24 h" button adds 24 h and runs `processDue()`. Use `demoNow()`, not `new Date()`, for anything time-based.
+**Demo clock:** `settings.demo_offset_hours` shifts "now" (`demoNow()`). The "Avancer de 24 h" button adds 24 h and runs `processDue()`. Use `demoNow()`, not `new Date()`, for anything time-based. **Keep the offset at 0 in real mode**, or reminders to real parents fire early. Resetting the demo (Paramètres) puts it back to 0.
+
+**Email modes** (`settings.email_mode`, set on Paramètres, banner at the top shows the current one): `simule` (nothing sent), `test` (sent only to `settings.test_recipients`, subject prefixed `[TEST]`, including Karine's alert), `reel` (sent to the real recipients).
 
 ### Key files
 
-- `src/lib/onboarding.ts`: all business logic (enroll, send, confirm, follow-ups, reset). `recordMessage()` is the single place where a real email or SMS provider gets plugged in.
+- `src/lib/onboarding.ts`: all business logic (enroll, send, confirm, follow-ups, reset). `recordMessage()` is the single place every email and SMS goes through: it sends email via `sendEmail()` and stores the result (`status`: `simule`, `envoye`, `envoye_test`, `echec`, plus `provider_id` and `error`). A failed send never breaks enrollment. An SMS provider would plug in here too.
+- `src/lib/mailer.ts`: Resend over `fetch` (no SDK), idempotency key per message, test-mode redirect.
+- `src/proxy.ts`, `src/lib/session.ts`, `src/lib/auth.ts`, `src/app/login/*`: staff login. Proxy redirects everything to `/login` except `/login`, `/confirmer/*`, `/api/relances` and static assets (the email logos must stay public). Every server action in `actions.ts` also calls `requireAuth()`; do the same in any new action. Fails closed if `ADMIN_PASSWORD` or `AUTH_SECRET` is missing.
 - `src/lib/emails.ts`: email templates as typed blocks, rendered to simple table-based HTML **plus a plain-text part**. Bold only for headings and key lines. The logo comes from `/logo-email.png`.
 - `src/lib/labels.ts`: French labels, group-code parsing, date formatting (America/Toronto), French grammar helpers (`deSubject`, `coursPhrase`: "d'écriture", not "de écriture").
 - `src/app/actions.ts`: server actions. `src/app/(admin)/*`: dashboard pages. `src/app/confirmer/[token]`: public parent page.
@@ -50,6 +60,8 @@ Group data (teachers, days, Zoom links) was loaded from the client's sheet "Fich
 
 Source: the client's two Word templates (Tutorat, Classes Futées), reproduced in `emails.ts` with group fields filled in. Subject lines come from the templates: "🎉 Bienvenue au tutorat Éducation Futée!" and "🎉 Bienvenue dans les Classes Futées!". The Tutorat email shows the Zoom link, ID and password; the Classes Futées email shows only the time slot (parents find the link on the platform). The reminder, thank-you, VA-alert and SMS texts are drafts written by Claude, pending the client's own wording.
 
+**Sending:** Resend, verified subdomain `onboarding.educationfutee.com` (DNS in GoDaddy). Sender `sandra@onboarding.educationfutee.com` (any address on that subdomain works, no mailbox needed), reply-to `info@educationfutee.com` (must be a real inbox). Sender, reply-to, Karine's address and mode are editable on Paramètres. Resend free plan: 100 emails per day, 1 domain.
+
 **SMS rule:** SMS is off by default (cost). If enabled, it is sent only with the reminder, never with the welcome email, and must fit **one 160-character GSM-7 segment** (plain ASCII, no accents). `reminderSms()` enforces this.
 
 ## Conventions
@@ -63,6 +75,8 @@ Source: the client's two Word templates (Tutorat, Classes Futées), reproduced i
 ## Not done yet / next steps
 
 - Client's **codes and scenarios** (naming convention for emails/scenarios) still to come from Atique.
-- Real sending (email provider + verified sender domain; SMS provider) once out of demo.
-- **No login:** anyone with the URL can open the dashboard. Add auth and tighten RLS (service key + restrictive policies) before real parent data.
+- **Supabase RLS:** every table still has the demo policy `demo_server_access` (anon, ALL, `true`). Plan: set `SUPABASE_SECRET_KEY` in Vercel, redeploy, confirm the app works, then drop the anon policies and revoke anon/authenticated grants (RLS stays on). Do not drop the policies before the app runs on the secret key.
+- Login is one shared password, no individual accounts or roles.
+- SMS provider (SMS is only stored, never sent).
+- First real enrollment still to test end to end, and `info@educationfutee.com` must be a monitored inbox.
 - Group follow-ups: times for 3-L-05 and 2CF-M-02 (day changed), Zoom password for 3-L-02, and 3-L-05/3-E-03 sharing a Zoom link.
