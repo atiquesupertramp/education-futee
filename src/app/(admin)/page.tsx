@@ -32,7 +32,7 @@ export default async function Dashboard() {
 
   const pipeline = [
     { label: "Courriel envoyé, en attente", value: waiting, tone: "bg-sky-500" },
-    { label: "Relancé (courriel + SMS)", value: reminded, tone: "bg-amber-500" },
+    { label: "Relancé", value: reminded, tone: "bg-amber-500" },
     { label: "À appeler", value: count((r) => r.status === "a_appeler"), tone: "bg-rose-500" },
     { label: "Confirmé", value: confirmed, tone: "bg-emerald-600" },
   ];

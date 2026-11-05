@@ -24,13 +24,20 @@ export default async function SettingsPage() {
             <input className="input" id="va_email" name="va_email" defaultValue={s.va_email} />
           </div>
         </div>
+        <label className="flex items-start gap-3 rounded-md bg-stone-50 p-3 text-sm ring-1 ring-stone-200">
+          <input type="checkbox" name="sms_enabled" defaultChecked={s.sms_enabled} className="mt-0.5 h-4 w-4 accent-brand-700" />
+          <span>
+            <span className="font-medium">Envoyer aussi un SMS avec le rappel</span>
+            <span className="block text-stone-500">Désactivé par défaut. Un seul SMS court par enfant (un segment de 160 caractères, sans accents), jamais avec le courriel de bienvenue.</span>
+          </span>
+        </label>
         <button className="btn btn-primary">Enregistrer</button>
       </form>
 
       <section className="card space-y-2 p-6 text-sm">
         <h2 className="font-semibold">Règles de suivi</h2>
         <p>1. À l&apos;inscription : un courriel de bienvenue par matière, avec un bouton de confirmation.</p>
-        <p>2. Sans confirmation après {REMINDER_AFTER_H} h : un rappel par courriel et un SMS (un seul par enfant, pour toutes les matières non confirmées).</p>
+        <p>2. Sans confirmation après {REMINDER_AFTER_H} h : un rappel par courriel{s.sms_enabled ? " et un SMS court" : ""} (un seul par enfant, pour toutes les matières non confirmées).</p>
         <p>3. Toujours rien {ESCALATE_AFTER_H} h plus tard : la famille passe dans « À appeler » et l&apos;adjointe reçoit une alerte.</p>
         <p>4. À la confirmation : courriel de remerciement, et les relances s&apos;arrêtent pour cette matière.</p>
         <p className="text-stone-500">En production, les relances sont vérifiées automatiquement chaque jour. Dans la démo, utilisez « Avancer de 24 h » en haut de l&apos;écran.</p>

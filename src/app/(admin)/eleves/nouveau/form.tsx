@@ -42,7 +42,7 @@ export function NewStudentForm({ groups }: { groups: Group[] }) {
             <div>
               <label className="label" htmlFor="parent_phone">Téléphone du parent</label>
               <input className="input" id="parent_phone" name="parent_phone" type="tel" placeholder="514 555-0123" />
-              <p className="mt-1 text-xs text-stone-500">Utilisé pour le SMS de rappel.</p>
+              <p className="mt-1 text-xs text-stone-500">Pour l&apos;appel de suivi si le parent ne confirme pas.</p>
             </div>
           </div>
           <p className="mt-3 text-xs text-stone-500">Un parent déjà inscrit (même courriel) est reconnu : l&apos;enfant est ajouté à la même famille.</p>
@@ -148,7 +148,7 @@ export function NewStudentForm({ groups }: { groups: Group[] }) {
             </ul>
           )}
           <p className="mt-4 text-xs leading-relaxed text-stone-500">
-            Sans confirmation après 24 h : rappel par courriel et SMS. Toujours rien 24 h plus tard : la famille est ajoutée à la liste « À appeler ».
+            Sans confirmation après 24 h : rappel par courriel. Toujours rien 24 h plus tard : la famille est ajoutée à la liste « À appeler ».
           </p>
           {state?.error && <p className="mt-4 rounded-md bg-rose-50 p-3 text-sm text-rose-800 ring-1 ring-rose-200">{state.error}</p>}
           <button className="btn btn-primary mt-4 w-full" disabled={pending || chosen.length === 0}>

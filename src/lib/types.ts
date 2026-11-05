@@ -76,4 +76,5 @@ export interface Settings {
   sender_email: string;
   reply_to: string;
   va_email: string;
+  sms_enabled: boolean;
 }

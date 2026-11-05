@@ -329,8 +329,17 @@ export function reminderEmail(s: Student, items: PendingItem[]): RenderedEmail {
   return build(`Rappel : confirmez les informations du cours de ${s.first_name}`, "Un clic suffit pour confirmer.", blocks);
 }
 
-export function reminderSms(s: Student, items: PendingItem[], shortLink: string): string {
-  return `Éducation Futée : Bonjour! Nous attendons votre confirmation pour ${coursPhrase(items.map((i) => i.group.subject))} de ${s.first_name}. Confirmez ici : ${shortLink} Merci! Répondez STOP pour ne plus recevoir de SMS.`;
+/** Strips accents so the SMS stays in the basic GSM alphabet (160 characters per segment instead of 70). */
+const ascii = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, "");
+
+export const SMS_SEGMENT = 160;
+
+/** Reminder SMS, kept to a single segment. Drops the opt-out line, then shortens the name, if needed. */
+export function reminderSms(s: Student, link: string): string {
+  const name = ascii(s.first_name).slice(0, 20);
+  const full = `Education Futee: confirmez le courriel de ${name}: ${link} STOP=arret`;
+  if (full.length <= SMS_SEGMENT) return full;
+  return `Education Futee: confirmez le courriel de ${name}: ${link}`.slice(0, SMS_SEGMENT);
 }
 
 export function thanksEmail(g: Group, s: Student): RenderedEmail {
@@ -353,7 +362,7 @@ export function vaAlertEmail(s: Student, parent: { name: string | null; email: s
     "Aucune confirmation après le rappel.",
     [
       { t: "p", text: "Bonjour Karine," },
-      { t: "p", text: `Le parent de **${s.first_name}** n'a toujours pas confirmé après le courriel de bienvenue et le rappel (courriel + SMS). Merci de l'appeler.` },
+      { t: "p", text: `Le parent de **${s.first_name}** n'a toujours pas confirmé après le courriel de bienvenue et le rappel. Merci de l'appeler.` },
       { t: "box", title: "Coordonnées", rows: [["Parent :", parent.name ?? "Non indiqué"], ["Courriel :", parent.email], ["Téléphone :", parent.phone ?? "Non indiqué"], ["Groupes :", codes.join(", ")]] },
       { t: "button", label: "Ouvrir la fiche de l'élève", href: studentUrl },
     ],

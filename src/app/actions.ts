@@ -127,7 +127,7 @@ export async function saveSettingsAction(fd: FormData) {
   must(
     await db()
       .from("settings")
-      .update({ sender_email: str(fd, "sender_email"), reply_to: str(fd, "reply_to"), va_email: str(fd, "va_email") })
+      .update({ sender_email: str(fd, "sender_email"), reply_to: str(fd, "reply_to"), va_email: str(fd, "va_email"), sms_enabled: fd.get("sms_enabled") === "on" })
       .eq("id", 1),
     "Paramètres",
   );

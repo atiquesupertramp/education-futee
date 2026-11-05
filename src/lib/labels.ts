@@ -30,7 +30,7 @@ export const cycleLabel = (c: number) => `${c}e cycle`;
 export const enrollmentStatusLabel: Record<EnrollmentStatus, string> = {
   en_attente: "En attente d'envoi",
   envoye: "Courriel envoyé",
-  relance: "Relancé (courriel + SMS)",
+  relance: "Relancé",
   a_appeler: "À appeler",
   confirme: "Confirmé",
   termine: "Terminé",

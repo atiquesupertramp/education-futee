@@ -249,7 +249,7 @@ export async function processDue(): Promise<{ reminders: number; escalations: nu
     "Relances à faire",
   ) as EnrollmentFull[];
 
-  // One reminder (and one SMS) per child covering every unconfirmed subject,
+  // One reminder (and one SMS, if enabled) per child covering every unconfirmed subject,
   // rather than one per subject, so parents are not flooded.
   const byStudent = new Map<string, { remind: EnrollmentFull[]; escalate: EnrollmentFull[] }>();
   for (const e of due) {
@@ -267,8 +267,9 @@ export async function processDue(): Promise<{ reminders: number; escalations: nu
       const items: PendingItem[] = remind.map((e) => ({ group: e.group, confirmUrl: confirmUrl(e.confirm_token) }));
       const mail = reminderEmail(s, items);
       await recordMessage({ student_id: s.id, channel: "email", kind: "relance", to_address: s.family.parent_email, subject: mail.subject, body_html: mail.html, body_text: mail.text, at: now });
-      if (s.family.parent_phone) {
-        await recordMessage({ student_id: s.id, channel: "sms", kind: "sms_relance", to_address: s.family.parent_phone, body_text: reminderSms(s, items, items[0].confirmUrl), at: now });
+      const withSms = settings.sms_enabled && !!s.family.parent_phone;
+      if (withSms) {
+        await recordMessage({ student_id: s.id, channel: "sms", kind: "sms_relance", to_address: s.family.parent_phone!, body_text: reminderSms(s, items[0].confirmUrl), at: now });
       }
       for (const e of remind) {
         await db()
@@ -276,7 +277,7 @@ export async function processDue(): Promise<{ reminders: number; escalations: nu
           .update({ status: "relance", reminder_sent_at: now.toISOString(), next_action_at: new Date(now.getTime() + ESCALATE_AFTER_H * HOUR).toISOString() })
           .eq("id", e.id);
       }
-      await logEvent(s.id, null, "relance", `Relance envoyée (courriel${s.family.parent_phone ? " + SMS" : ""}) : ${remind.map((e) => e.group.code).join(", ")}`, now);
+      await logEvent(s.id, null, "relance", `Relance envoyée (courriel${withSms ? " + SMS" : ""}) : ${remind.map((e) => e.group.code).join(", ")}`, now);
       reminders++;
     }
     if (escalate.length) {
