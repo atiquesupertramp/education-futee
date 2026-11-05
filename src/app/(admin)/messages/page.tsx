@@ -14,7 +14,7 @@ export default async function OutboxPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
-      <PageHeader title="Boîte d'envoi" subtitle="Tous les courriels et SMS générés par le système. En mode démo, rien n'est réellement envoyé." />
+      <PageHeader title="Boîte d'envoi" subtitle="Tous les courriels et SMS générés par le système. Chaque message indique s'il a été simulé, envoyé en test ou envoyé." />
       <div className="mb-4 flex flex-wrap gap-2">
         {kinds.map((k) => (
           <Link key={k || "all"} href={k ? `/messages?type=${k}` : "/messages"} className={`rounded-full px-3 py-1 text-sm font-medium ring-1 ${k === type ? "bg-stone-900 text-white ring-stone-900" : "bg-white text-stone-700 ring-stone-300 hover:bg-stone-50"}`}>

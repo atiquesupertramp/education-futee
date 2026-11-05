@@ -19,7 +19,12 @@ export default async function MessagePage({ params, searchParams }: { params: Pr
     <div>
       <PageHeader
         title={isSms ? "SMS" : m.subject ?? "Courriel"}
-        subtitle={<Pill tone="amber">Simulé : non envoyé (mode démo)</Pill>}
+        subtitle={
+          m.status === "envoye" ? <Pill tone="brand">Envoyé</Pill>
+          : m.status === "envoye_test" ? <Pill tone="sky">Envoyé en test (à {settings.test_recipients})</Pill>
+          : m.status === "echec" ? <Pill tone="rose">Échec : {m.error ?? "erreur inconnue"}</Pill>
+          : <Pill tone="amber">Simulé : non envoyé</Pill>
+        }
         actions={m.student && <Link href={`/eleves/${m.student.id}`} className="btn btn-secondary">← Fiche de {m.student.first_name}</Link>}
       />
       <div className="card mb-4 grid gap-x-8 gap-y-1 p-4 text-sm sm:grid-cols-2">
