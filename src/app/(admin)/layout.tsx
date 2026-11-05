@@ -13,13 +13,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const callCount = new Set((calls.data ?? []).map((r) => r.student_id)).size;
   const clock = new Intl.DateTimeFormat("fr-CA", { timeZone: "America/Toronto", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(now);
 
+  const banner = {
+    simule: { box: "border-amber-200 bg-amber-50 text-amber-900", title: "Mode démo", text: "Aucun courriel ni SMS n'est réellement envoyé." },
+    test: {
+      box: "border-sky-200 bg-sky-50 text-sky-900",
+      title: "Mode test",
+      text: `Les courriels sont envoyés seulement à : ${settings.test_recipients || "(aucune adresse de test)"}. Aucun SMS n'est envoyé.`,
+    },
+    reel: { box: "border-rose-200 bg-rose-50 text-rose-900", title: "Envoi réel", text: "Les courriels sont envoyés aux parents. Aucun SMS n'est envoyé." },
+  }[settings.email_mode];
+
   return (
     <>
-        <div className="border-b border-amber-200 bg-amber-50">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 text-sm text-amber-900">
-            <span className="font-semibold">Mode démo</span>
-            <span>Aucun courriel ni SMS n&apos;est réellement envoyé.</span>
-            <span className="text-amber-800">
+        <div className={`border-b ${banner.box}`}>
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 text-sm">
+            <span className="font-semibold">{banner.title}</span>
+            <span>{banner.text}</span>
+            <span className="opacity-80">
               Horloge de la démo : <strong className="font-semibold">{clock}</strong>
               {settings.demo_offset_hours > 0 && <span> (+{settings.demo_offset_hours} h)</span>}
             </span>
