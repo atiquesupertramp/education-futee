@@ -24,6 +24,22 @@ export default async function SettingsPage() {
             <input className="input" id="va_email" name="va_email" defaultValue={s.va_email} />
           </div>
         </div>
+        <div className="space-y-3 rounded-md bg-stone-50 p-3 text-sm ring-1 ring-stone-200">
+          <div>
+            <label className="label" htmlFor="email_mode">Mode d&apos;envoi des courriels</label>
+            <select className="input" id="email_mode" name="email_mode" defaultValue={s.email_mode}>
+              <option value="simule">Simulation (rien n&apos;est envoyé)</option>
+              <option value="test">Test (envoyé seulement aux adresses de test ci-dessous)</option>
+              <option value="reel">Réel (envoyé aux parents)</option>
+            </select>
+            {s.email_mode === "reel" && <p className="mt-1 text-xs font-medium text-rose-700">Attention : les parents reçoivent de vrais courriels.</p>}
+          </div>
+          <div>
+            <label className="label" htmlFor="test_recipients">Adresses de test</label>
+            <input className="input" id="test_recipients" name="test_recipients" defaultValue={s.test_recipients} placeholder="vous@exemple.com, autre@exemple.com" />
+            <p className="mt-1 text-xs text-stone-500">En mode test, tous les courriels (y compris l&apos;alerte de l&apos;adjointe) vont ici, avec « [TEST] » dans l&apos;objet.</p>
+          </div>
+        </div>
         <label className="flex items-start gap-3 rounded-md bg-stone-50 p-3 text-sm ring-1 ring-stone-200">
           <input type="checkbox" name="sms_enabled" defaultChecked={s.sms_enabled} className="mt-0.5 h-4 w-4 accent-brand-700" />
           <span>

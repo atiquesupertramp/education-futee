@@ -68,6 +68,8 @@ export interface Message {
   body_html: string | null;
   body_text: string | null;
   status: string;
+  provider_id?: string | null;
+  error?: string | null;
   sent_at: string;
 }
 
@@ -77,4 +79,6 @@ export interface Settings {
   reply_to: string;
   va_email: string;
   sms_enabled: boolean;
+  email_mode: "simule" | "test" | "reel";
+  test_recipients: string;
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import { appUrl, db, must } from "./db";
 import type { Enrollment, Family, Group, Settings, Student } from "./types";
+import { sendEmail, type SendResult } from "./mailer";
 import { coursPhrase, parseGroupCode, subjectLabel } from "./labels";
 import {
   classesFuteesWelcome,
@@ -45,10 +46,25 @@ async function recordMessage(m: {
   body_text: string;
   at: Date;
 }) {
-  // Demo mode: nothing leaves the app. The message is stored exactly as it
-  // would be sent, so it can be previewed from the dashboard.
+  // Every message is stored exactly as rendered, so it can be previewed from
+  // the dashboard. Emails also go through Resend depending on settings.email_mode
+  // (simule = nothing sent). SMS is still never sent.
+  const id = crypto.randomUUID();
+  let result: SendResult = { status: "simule" };
+  if (m.channel === "email" && m.body_html) {
+    result = await sendEmail(await getSettings(), {
+      to: m.to_address,
+      subject: m.subject ?? "",
+      html: m.body_html,
+      text: m.body_text,
+      idempotencyKey: id,
+    });
+  }
   must(
     await db().from("messages").insert({
+      id,
+      provider_id: "providerId" in result ? result.providerId : null,
+      error: result.status === "echec" ? result.error : null,
       student_id: m.student_id,
       enrollment_id: m.enrollment_id ?? null,
       channel: m.channel,
@@ -57,7 +73,7 @@ async function recordMessage(m: {
       subject: m.subject ?? null,
       body_html: m.body_html ?? null,
       body_text: m.body_text,
-      status: "simule",
+      status: result.status,
       sent_at: m.at.toISOString(),
     }),
     "Enregistrement du message",
