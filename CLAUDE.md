@@ -17,8 +17,8 @@ Onboarding and membership dashboard for **Éducation Futée**, a French-language
 | Var | Notes |
 |---|---|
 | `SUPABASE_URL` | `https://uaulnbilcewbjrhjvqik.supabase.co` |
-| `SUPABASE_SECRET_KEY` | Supabase secret key (`sb_secret_...`), **server-side only**. `db()` prefers it over `SUPABASE_KEY`. Required once the open RLS policies are removed. |
-| `SUPABASE_KEY` | Supabase publishable key, fallback for `db()`. Server-side only (`server-only`). Never expose to the browser. |
+| `SUPABASE_SECRET_KEY` | Supabase secret key (`sb_secret_...`), **server-side only**. **Required**: the tables are locked to every other key. |
+| `SUPABASE_KEY` | Supabase publishable key. Legacy fallback in `db()`; it cannot read or write any table now. |
 | `APP_URL` | Public base URL for confirmation links and the email logo. Production: `https://app.educationfutee.com`. |
 | `RESEND_API_KEY` | Resend key with sending access. Without it, test and real modes record an `echec`. |
 | `ADMIN_PASSWORD` | The shared staff password for the dashboard login. |
@@ -75,7 +75,7 @@ Source: the client's two Word templates (Tutorat, Classes Futées), reproduced i
 ## Not done yet / next steps
 
 - Client's **codes and scenarios** (naming convention for emails/scenarios) still to come from Atique.
-- **Supabase RLS:** every table still has the demo policy `demo_server_access` (anon, ALL, `true`). Plan: set `SUPABASE_SECRET_KEY` in Vercel, redeploy, confirm the app works, then drop the anon policies and revoke anon/authenticated grants (RLS stays on). Do not drop the policies before the app runs on the secret key.
+- **Supabase access:** done. The app connects with `SUPABASE_SECRET_KEY` (bypasses RLS). All tables have RLS on with **no policies**, and `anon`/`authenticated` have no grants on `public`, so the publishable key can read and write nothing. Never add a permissive policy for `anon`. `SUPABASE_KEY` stays only as a fallback and no longer works for data access.
 - Login is one shared password, no individual accounts or roles.
 - SMS provider (SMS is only stored, never sent).
 - First real enrollment still to test end to end, and `info@educationfutee.com` must be a monitored inbox.

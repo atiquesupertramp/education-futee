@@ -113,13 +113,20 @@ create index on public.messages (enrollment_id);
 create index on public.events (student_id);
 create index on public.events (enrollment_id);
 
--- DEMO ONLY: RLS on, open policy for the anon/publishable key, which is used
--- server-side only. Tighten before real data (service key + restrictive policies).
-do $$
-declare t text;
-begin
-  foreach t in array array['groups','families','students','enrollments','messages','events','settings'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('create policy "demo_server_access" on public.%I for all to anon using (true) with check (true)', t);
-  end loop;
-end $$;
+-- Access model: the app uses the Supabase secret key (bypasses RLS). RLS is on
+-- for every table with NO policies, and anon/authenticated have no grants, so
+-- the publishable key cannot read or write anything. Migration:
+-- lock_down_rls_secret_key_only.
+alter table public.families enable row level security;
+alter table public.students enable row level security;
+alter table public.groups enable row level security;
+alter table public.enrollments enable row level security;
+alter table public.messages enable row level security;
+alter table public.events enable row level security;
+alter table public.settings enable row level security;
+revoke all on all tables in schema public from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+revoke all on all functions in schema public from anon, authenticated;
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke all on sequences from anon, authenticated;
+alter default privileges in schema public revoke all on functions from anon, authenticated;
