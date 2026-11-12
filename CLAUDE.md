@@ -32,10 +32,10 @@ Local setup: `npm install`, then `vercel env pull .env.local` (or copy the value
 ## How the app works
 
 1. A closer fills **Nouvel élève** (`src/app/(admin)/eleves/nouveau`): parent, child, cycle, program, **one group per subject** (1 to 3), dates. The same parent email reuses one `families` row (siblings).
-2. `createStudent()` in `src/lib/onboarding.ts` validates the input (group cycle must match the student, one group per subject, at least one group), creates `enrollments`, and sends **one welcome email per enrollment**.
-3. Each welcome email has a **"Je confirme la réception"** button → `/confirmer/[token]` (a two-step page: the parent sees it, then clicks to confirm, so link scanners can't confirm by accident).
+2. `createStudent()` in `src/lib/onboarding.ts` validates the input (group cycle must match the student, one group per subject, at least one group, optional payment), creates `enrollments`, and sends **one combined welcome email per program** (normally a single email listing every subject: time slot, teacher, Zoom details).
+3. The welcome email has one **"Je confirme la réception"** button → `/confirmer/[token]` (a two-step page: the parent sees it, then clicks to confirm, so link scanners can't confirm by accident). The page shows the thank-you in place (no redirect) and has an error boundary. **One token confirms every open enrollment of that child** (`confirmByToken`), and sends a single thank-you.
 4. `processDue()` runs the follow-ups: after **24 h** without confirmation, **one reminder email per child** covering all unconfirmed subjects (+ a short SMS **only if `settings.sms_enabled`**, off by default). After another **24 h**, enrollments move to `a_appeler` (call list) and the VA (Karine) gets an alert email.
-5. On confirmation, a thank-you email goes out and follow-ups stop for that subject. Follow-ups skip students whose membership isn't `actif`.
+5. On confirmation, follow-ups stop. Follow-ups skip students whose membership isn't `actif`.
 
 **Demo clock:** `settings.demo_offset_hours` shifts "now" (`demoNow()`). The "Avancer de 24 h" button adds 24 h and runs `processDue()`. Use `demoNow()`, not `new Date()`, for anything time-based. **Keep the offset at 0 in real mode**, or reminders to real parents fire early. Resetting the demo (Paramètres) puts it back to 0.
 
@@ -46,7 +46,9 @@ Local setup: `npm install`, then `vercel env pull .env.local` (or copy the value
 - `src/lib/onboarding.ts`: all business logic (enroll, send, confirm, follow-ups, reset). `recordMessage()` is the single place every email and SMS goes through: it sends email via `sendEmail()` and stores the result (`status`: `simule`, `envoye`, `envoye_test`, `echec`, plus `provider_id` and `error`). A failed send never breaks enrollment. An SMS provider would plug in here too.
 - `src/lib/mailer.ts`: Resend over `fetch` (no SDK), idempotency key per message, test-mode redirect.
 - `src/proxy.ts`, `src/lib/session.ts`, `src/lib/auth.ts`, `src/app/login/*`: staff login. Proxy redirects everything to `/login` except `/login`, `/confirmer/*`, `/api/relances` and static assets (the email logos must stay public). Every server action in `actions.ts` also calls `requireAuth()`; do the same in any new action. Fails closed if `ADMIN_PASSWORD` or `AUTH_SECRET` is missing.
-- `src/lib/emails.ts`: email templates as typed blocks, rendered to simple table-based HTML **plus a plain-text part**. Bold only for headings and key lines. The logo comes from `/logo-email.png`.
+- `src/lib/email-engine.ts` (pure): template text format (`# titre`, `- liste`, `[[bouton]]`, `{{cours}}`, `{{prenom}}`...), parse/serialize/validate, render to simple table-based HTML **plus a plain-text part**. `src/lib/email-defaults.ts`: built-in templates. `src/lib/email-store.ts`: `getTemplate()` loads the edited version from `email_templates` and falls back to the default on any error. `src/lib/emails.ts`: builds each email from its template (`{{cours}}` expands to one box per course). Staff edit templates on **Modèles de courriel** (`/modeles`): save validates (a confirmation button and `{{cours}}` must remain), preview with sample data, restore default. Changes apply to future sends only. The logo comes from `/logo-email.png`.
+- `src/lib/filters.ts` + `src/components/filter-bar.tsx`: programme / matière / groupe (/ paiement) filters in the URL, used on the dashboard and the student list.
+- Payments: `students.payment_type` (`mensuel` | `unique`) and `payment_amount` (CAD). Edited on the student profile, set at enrollment, totals on the dashboard (monthly revenue counts active students only; each child once).
 - `src/lib/labels.ts`: French labels, group-code parsing, date formatting (America/Toronto), French grammar helpers (`deSubject`, `coursPhrase`: "d'écriture", not "de écriture").
 - `src/app/actions.ts`: server actions. `src/app/(admin)/*`: dashboard pages. `src/app/confirmer/[token]`: public parent page.
 
@@ -58,7 +60,7 @@ Group data (teachers, days, Zoom links) was loaded from the client's sheet "Fich
 
 ## Emails
 
-Source: the client's two Word templates (Tutorat, Classes Futées), reproduced in `emails.ts` with group fields filled in. Subject lines come from the templates: "🎉 Bienvenue au tutorat Éducation Futée!" and "🎉 Bienvenue dans les Classes Futées!". The Tutorat email shows the Zoom link, ID and password; the Classes Futées email shows only the time slot (parents find the link on the platform). The reminder, thank-you, VA-alert and SMS texts are drafts written by Claude, pending the client's own wording.
+Source: the client's two Word templates (Tutorat, Classes Futées), reproduced in `email-defaults.ts` and adapted so one email covers all of a child's subjects (editable in the app). Subject lines come from the templates: "🎉 Bienvenue au tutorat Éducation Futée!" and "🎉 Bienvenue dans les Classes Futées!". The Tutorat email shows the Zoom link, ID and password; the Classes Futées email shows only the time slot (parents find the link on the platform). The reminder, thank-you, VA-alert and SMS texts are drafts written by Claude, pending the client's own wording.
 
 **Sending:** Resend, verified subdomain `onboarding.educationfutee.com` (DNS in GoDaddy). Sender `sandra@onboarding.educationfutee.com` (any address on that subdomain works, no mailbox needed), reply-to `info@educationfutee.com` (must be a real inbox). Sender, reply-to, Karine's address and mode are editable on Paramètres. Resend free plan: 100 emails per day, 1 domain.
 

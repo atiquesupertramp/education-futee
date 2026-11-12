@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { db, must } from "@/lib/db";
 import {
+  checkPayment,
   advanceClock,
   confirmByToken,
   createStudent,
@@ -14,8 +15,21 @@ import {
   resetDemo,
 } from "@/lib/onboarding";
 import { parseGroupCode } from "@/lib/labels";
+import { TEMPLATES, defaultBody, isTemplateKey } from "@/lib/email-defaults";
+import { validateTemplate } from "@/lib/email-engine";
+import { sampleEmail } from "@/lib/emails";
+import type { PaymentType } from "@/lib/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+
+/** Reads the payment fields of a form. Accepts "49,99" and "49.99". */
+function readPayment(fd: FormData): { type: PaymentType | null; amount: number | null } {
+  const rawType = str(fd, "payment_type");
+  const type = rawType === "mensuel" || rawType === "unique" ? rawType : null;
+  const raw = str(fd, "payment_amount").replace(/\s|\$/g, "").replace(",", ".");
+  const amount = raw === "" ? null : Number(raw);
+  return { type, amount: amount != null && Number.isNaN(amount) ? NaN : amount };
+}
 
 export type FormState = { error?: string } | undefined;
 
@@ -25,7 +39,10 @@ export async function createStudentAction(_prev: FormState, fd: FormData): Promi
   try {
     const cycle = Number(fd.get("cycle"));
     if (cycle !== 2 && cycle !== 3) return { error: "Choisissez le cycle." };
+    const pay = readPayment(fd);
     id = await createStudent({
+      payment_type: pay.type,
+      payment_amount: pay.amount,
       parent_name: str(fd, "parent_name"),
       parent_email: str(fd, "parent_email"),
       parent_phone: str(fd, "parent_phone"),
@@ -95,6 +112,24 @@ export async function updateMembershipAction(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
+export type PaymentState = { error?: string; saved?: boolean } | undefined;
+
+export async function updatePaymentAction(_prev: PaymentState, fd: FormData): Promise<PaymentState> {
+  await requireAuth();
+  const id = str(fd, "student_id");
+  const pay = readPayment(fd);
+  const err = checkPayment(pay.type, pay.amount);
+  if (err) return { error: err };
+  const res = await db()
+    .from("students")
+    .update({ payment_type: pay.type, payment_amount: pay.type ? Math.round((pay.amount ?? 0) * 100) / 100 : null })
+    .eq("id", id);
+  if (res.error) return { error: "Enregistrement impossible : " + res.error.message };
+  await db().from("events").insert({ student_id: id, type: "paiement", detail: pay.type ? `Paiement enregistré : ${pay.amount} $ (${pay.type === "mensuel" ? "mensuel" : "unique"})` : "Paiement retiré" });
+  revalidatePath("/", "layout");
+  return { saved: true };
+}
+
 export async function deleteStudentAction(fd: FormData) {
   await requireAuth();
   must(await db().from("students").delete().eq("id", str(fd, "student_id")), "Suppression");
@@ -150,4 +185,51 @@ export async function resetDemoAction() {
   await resetDemo();
   revalidatePath("/", "layout");
   redirect("/");
+}
+
+/* ------------------------------------------------------------------ */
+/* Email templates                                                     */
+/* ------------------------------------------------------------------ */
+
+export type TemplateState = { error?: string; saved?: boolean; previewHtml?: string; previewSubject?: string; subject?: string; body?: string } | undefined;
+
+function readTemplate(fd: FormData) {
+  const key = str(fd, "key");
+  if (!isTemplateKey(key)) return null;
+  return { key, subject: String(fd.get("subject") ?? "").replace(/\s+/g, " ").trim(), body: String(fd.get("body") ?? "").replace(/\r\n?/g, "\n").trim() };
+}
+
+/** Saves the edited template. From then on every email of this kind is built from it. */
+export async function saveTemplateAction(_prev: TemplateState, fd: FormData): Promise<TemplateState> {
+  await requireAuth();
+  const t = readTemplate(fd);
+  if (!t) return { error: "Modèle inconnu." };
+  const error = validateTemplate(t.subject, t.body, TEMPLATES[t.key].rules);
+  if (error) return { error, subject: t.subject, body: t.body };
+  const res = await db().from("email_templates").upsert({ key: t.key, subject: t.subject, body: t.body, updated_at: new Date().toISOString() });
+  if (res.error) return { error: "Enregistrement impossible : " + res.error.message, subject: t.subject, body: t.body };
+  revalidatePath("/modeles", "layout");
+  return { saved: true, subject: t.subject, body: t.body };
+}
+
+/** Renders the template with example data, without saving. */
+export async function previewTemplateAction(_prev: TemplateState, fd: FormData): Promise<TemplateState> {
+  await requireAuth();
+  const t = readTemplate(fd);
+  if (!t) return { error: "Modèle inconnu." };
+  const error = validateTemplate(t.subject, t.body, TEMPLATES[t.key].rules);
+  if (error) return { error, subject: t.subject, body: t.body };
+  const mail = sampleEmail(t.key, t);
+  return { previewHtml: mail.html, previewSubject: mail.subject, subject: t.subject, body: t.body };
+}
+
+/** Removes the customization: the built-in template is used again. */
+export async function resetTemplateAction(_prev: TemplateState, fd: FormData): Promise<TemplateState> {
+  await requireAuth();
+  const key = str(fd, "key");
+  if (!isTemplateKey(key)) return { error: "Modèle inconnu." };
+  const res = await db().from("email_templates").delete().eq("key", key);
+  if (res.error) return { error: "Impossible de restaurer : " + res.error.message };
+  revalidatePath("/modeles", "layout");
+  return { saved: true, subject: TEMPLATES[key].subject, body: defaultBody(key) };
 }

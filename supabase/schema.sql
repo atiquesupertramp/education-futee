@@ -43,6 +43,8 @@ create table public.students (
   membership_status text not null default 'actif' check (membership_status in ('actif','en_pause','termine')),
   closer_name text,
   notes text,
+  payment_type text check (payment_type in ('mensuel','unique')),  -- monthly or one-time
+  payment_amount numeric(10,2) check (payment_amount is null or payment_amount >= 0),  -- CAD, per month or total
   created_at timestamptz not null default now()
 );
 
@@ -91,6 +93,15 @@ create table public.events (
   at timestamptz not null default now()
 );
 
+-- Editable email templates. A row overrides the built-in default for that key
+-- (see src/lib/email-defaults.ts); deleting the row restores the default.
+create table public.email_templates (
+  key text primary key check (key in ('bienvenue_tutorat','bienvenue_classes_futees','relance','merci','alerte_va')),
+  subject text not null,
+  body text not null,
+  updated_at timestamptz not null default now()
+);
+
 -- Single-row settings.
 create table public.settings (
   id int primary key default 1 check (id = 1),
@@ -124,6 +135,7 @@ alter table public.enrollments enable row level security;
 alter table public.messages enable row level security;
 alter table public.events enable row level security;
 alter table public.settings enable row level security;
+alter table public.email_templates enable row level security;
 revoke all on all tables in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 revoke all on all functions in schema public from anon, authenticated;

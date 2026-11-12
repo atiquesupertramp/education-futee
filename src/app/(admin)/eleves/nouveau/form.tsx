@@ -15,6 +15,7 @@ export function NewStudentForm({ groups }: { groups: Group[] }) {
   const [state, action, pending] = useActionState<FormState, FormData>(createStudentAction, undefined);
   const [cycle, setCycle] = useState<2 | 3 | null>(null);
   const [program, setProgram] = useState<Program>("tutorat");
+  const [payType, setPayType] = useState<"" | "mensuel" | "unique">("");
   const [picked, setPicked] = useState<Record<Subject, string>>({ lecture: "", ecriture: "", math: "" });
 
   const options = useMemo(
@@ -69,7 +70,7 @@ export function NewStudentForm({ groups }: { groups: Group[] }) {
               <label className="label">Cycle *</label>
               <div className="flex gap-2">
                 {[2, 3].map((c) => (
-                  <label key={c} className={`flex flex-1 cursor-pointer items-center justify-center rounded-md px-3 py-2 text-sm font-semibold ring-1 ${cycle === c ? "bg-brand-700 text-white ring-brand-700" : "bg-white ring-stone-300 hover:bg-stone-50"}`}>
+                  <label key={c} className={`flex flex-1 cursor-pointer items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition ${cycle === c ? "bg-brand-700 text-white ring-brand-700" : "bg-white ring-stone-200 hover:bg-stone-50"}`}>
                     <input type="radio" name="cycle" value={c} className="sr-only" required checked={cycle === c} onChange={() => { setCycle(c as 2 | 3); reset(); }} />
                     {c}e cycle
                   </label>
@@ -84,7 +85,7 @@ export function NewStudentForm({ groups }: { groups: Group[] }) {
           <p className="mb-4 text-sm text-stone-500">Choisissez le programme, puis le groupe pour chaque matière suivie (une, deux ou trois).</p>
           <div className="mb-5 flex gap-2">
             {(["tutorat", "classes_futees"] as Program[]).map((p) => (
-              <label key={p} className={`cursor-pointer rounded-md px-4 py-2 text-sm font-semibold ring-1 ${program === p ? "bg-stone-900 text-white ring-stone-900" : "bg-white ring-stone-300 hover:bg-stone-50"}`}>
+              <label key={p} className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold ring-1 transition ${program === p ? "bg-stone-900 text-white ring-stone-900" : "bg-white ring-stone-200 hover:bg-stone-50"}`}>
                 <input type="radio" className="sr-only" checked={program === p} onChange={() => { setProgram(p); reset(); }} />
                 {programLabel[p]}
               </label>
@@ -112,6 +113,31 @@ export function NewStudentForm({ groups }: { groups: Group[] }) {
         </section>
 
         <section className="card p-5">
+          <h2 className="font-semibold">Paiement</h2>
+          <p className="mb-4 text-sm text-stone-500">Montant payé par la famille pour cet élève (en dollars canadiens). Il alimente les totaux du tableau de bord.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <span className="label">Type de paiement</span>
+              <div className="flex gap-2">
+                {([["mensuel", "Mensuel"], ["unique", "Paiement unique"]] as const).map(([v, label]) => (
+                  <label key={v} className={`flex flex-1 cursor-pointer items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition ${payType === v ? "bg-brand-700 text-white ring-brand-700" : "bg-white ring-stone-200 hover:bg-stone-50"}`}>
+                    <input type="radio" name="payment_type" value={v} className="sr-only" checked={payType === v} onChange={() => setPayType(v)} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {payType && (
+                <button type="button" onClick={() => setPayType("")} className="mt-1 text-xs text-stone-500 underline">Retirer</button>
+              )}
+            </div>
+            <div>
+              <label className="label" htmlFor="payment_amount">{payType === "mensuel" ? "Montant par mois ($)" : payType === "unique" ? "Montant total ($)" : "Montant ($)"}</label>
+              <input className="input" id="payment_amount" name="payment_amount" inputMode="decimal" placeholder="Ex. : 149,00" required={!!payType} disabled={!payType} />
+            </div>
+          </div>
+        </section>
+
+        <section className="card p-5">
           <h2 className="mb-4 font-semibold">Abonnement</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
@@ -136,23 +162,27 @@ export function NewStudentForm({ groups }: { groups: Group[] }) {
           {chosen.length === 0 ? (
             <p className="mt-2 text-sm text-stone-500">Aucun groupe choisi pour l&apos;instant.</p>
           ) : (
-            <ul className="mt-3 space-y-3">
-              {chosen.map((g) => (
-                <li key={g.code} className="rounded-md bg-brand-50 p-3 text-sm ring-1 ring-brand-100">
-                  <div className="font-semibold">Courriel « Bienvenue {g.program === "tutorat" ? "au tutorat" : "dans les Classes Futées"} »</div>
-                  <div className="text-stone-700">{subjectLabel[g.subject]} · {g.code}</div>
-                  <div className="text-stone-500">{[g.day, g.time, g.teacher].filter(Boolean).join(" · ")}</div>
-                  {g.notes && <div className="mt-1 text-xs text-amber-800">⚠ {g.notes}</div>}
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="mt-2 text-sm text-stone-600">
+                <strong>Un seul courriel</strong> « Bienvenue {program === "tutorat" ? "au tutorat" : "dans les Classes Futées"} » regroupe {chosen.length > 1 ? `les ${chosen.length} cours` : "le cours"}, avec un seul bouton de confirmation.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {chosen.map((g) => (
+                  <li key={g.code} className="rounded-xl bg-brand-50 p-3 text-sm ring-1 ring-brand-100">
+                    <div className="font-semibold">{subjectLabel[g.subject]} · {g.code}</div>
+                    <div className="text-stone-500">{[g.day, g.time, g.teacher].filter(Boolean).join(" · ")}</div>
+                    {g.notes && <div className="mt-1 text-xs text-amber-800">⚠ {g.notes}</div>}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           <p className="mt-4 text-xs leading-relaxed text-stone-500">
             Sans confirmation après 24 h : rappel par courriel. Toujours rien 24 h plus tard : la famille est ajoutée à la liste « À appeler ».
           </p>
           {state?.error && <p className="mt-4 rounded-md bg-rose-50 p-3 text-sm text-rose-800 ring-1 ring-rose-200">{state.error}</p>}
           <button className="btn btn-primary mt-4 w-full" disabled={pending || chosen.length === 0}>
-            {pending ? "Inscription…" : `Inscrire et envoyer ${chosen.length || ""} courriel${chosen.length > 1 ? "s" : ""}`}
+            {pending ? "Inscription…" : "Inscrire et envoyer le courriel"}
           </button>
         </div>
       </aside>

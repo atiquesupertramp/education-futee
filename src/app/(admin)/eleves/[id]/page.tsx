@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { PageHeader, Pill, StatusPill } from "@/components/ui";
-import { cycleLabel, fmtDateTime, messageKindLabel, programLabel, subjectLabel } from "@/lib/labels";
+import { cycleLabel, fmtDateTime, fmtMoney, messageKindLabel, paymentTypeLabel, programLabel, subjectLabel } from "@/lib/labels";
 import type { Enrollment, EnrollmentStatus, Family, Group, Message, Student } from "@/lib/types";
 import { confirmUrl } from "@/lib/onboarding";
+import { PaymentForm } from "./payment-form";
 import { confirmManualAction, deleteStudentAction, resendWelcomeAction, updateMembershipAction } from "@/app/actions";
 
 type Full = Student & { family: Family & { students: Pick<Student, "id" | "first_name">[] }; enrollments: (Enrollment & { group: Group })[] };
@@ -29,7 +30,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
     <div>
       {nouveau && (
         <div className="mb-5 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900 ring-1 ring-emerald-200">
-          <strong>{s.first_name} est inscrit.</strong> {enrollments.length} courriel{enrollments.length > 1 ? "s" : ""} de bienvenue généré{enrollments.length > 1 ? "s" : ""} pour {s.family.parent_email}. Ouvrez-les ci-dessous pour voir exactement ce que le parent reçoit.
+          <strong>{s.first_name} est inscrit.</strong> Le courriel de bienvenue ({enrollments.length > 1 ? `les ${enrollments.length} cours sont regroupés dans un seul courriel par programme` : "1 cours"}) a été généré pour {s.family.parent_email}. Ouvrez-le ci-dessous pour voir exactement ce que le parent reçoit.
         </div>
       )}
       <PageHeader
@@ -41,7 +42,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <section className="card">
-            <h2 className="border-b border-stone-100 px-5 py-3 font-semibold">Matières et confirmations</h2>
+            <h2 className="card-title">Matières et confirmations</h2>
             <ul className="divide-y divide-stone-100">
               {enrollments.map((e) => (
                 <li key={e.id} className="px-5 py-4">
@@ -61,17 +62,17 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                   </div>
                   {e.status !== "confirme" && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <a href={confirmUrl(e.confirm_token)} target="_blank" className="btn btn-secondary py-1 text-xs" title="Ouvre la page que le parent voit en cliquant sur le bouton du courriel">
-                        Simuler le clic du parent ↗
+                      <a href={confirmUrl(e.confirm_token)} target="_blank" className="btn btn-secondary py-1 text-xs" title="Ouvre la page que le parent voit en cliquant sur le bouton du courriel. Un seul clic confirme tous les cours de l'enfant.">
+                        Simuler le clic du parent (confirme tous les cours) ↗
                       </a>
                       <form action={confirmManualAction}>
                         <input type="hidden" name="token" value={e.confirm_token} />
                         <input type="hidden" name="via" value="reponse" />
-                        <button className="btn btn-secondary py-1 text-xs">Le parent a répondu CONFIRMER</button>
+                        <button className="btn btn-secondary py-1 text-xs">Le parent a répondu CONFIRMER (tous les cours)</button>
                       </form>
                       <form action={resendWelcomeAction}>
                         <input type="hidden" name="enrollment_id" value={e.id} />
-                        <button className="btn btn-secondary py-1 text-xs">Renvoyer le courriel</button>
+                        <button className="btn btn-secondary py-1 text-xs">Renvoyer le courriel de bienvenue</button>
                       </form>
                     </div>
                   )}
@@ -81,7 +82,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
           </section>
 
           <section className="card">
-            <h2 className="border-b border-stone-100 px-5 py-3 font-semibold">Courriels et SMS ({messages.length})</h2>
+            <h2 className="card-title">Courriels et SMS ({messages.length})</h2>
             <ul className="divide-y divide-stone-100">
               {messages.map((m) => (
                 <li key={m.id}>
@@ -99,7 +100,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
           </section>
 
           <section className="card">
-            <h2 className="border-b border-stone-100 px-5 py-3 font-semibold">Historique</h2>
+            <h2 className="card-title">Historique</h2>
             <ol className="space-y-3 px-5 py-4">
               {events.map((ev) => (
                 <li key={ev.id} className="flex gap-3 text-sm">
@@ -129,6 +130,19 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
               </div>
             )}
             {s.closer_name && <div className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-500">Inscrit par {s.closer_name}</div>}
+          </section>
+
+          <section className="card p-5">
+            <h2 className="mb-1 font-semibold">Paiement</h2>
+            {s.payment_type && (
+              <p className="mb-3 text-sm text-stone-600">
+                <strong className="text-lg tabular-nums text-stone-900">{fmtMoney(s.payment_amount)}</strong>
+                {s.payment_type === "mensuel" ? " par mois" : " (paiement unique)"} · {paymentTypeLabel[s.payment_type]}
+              </p>
+            )}
+            <div className={s.payment_type ? "" : "mt-3"}>
+              <PaymentForm studentId={s.id} type={s.payment_type} amount={s.payment_amount} />
+            </div>
           </section>
 
           <section className="card p-5">

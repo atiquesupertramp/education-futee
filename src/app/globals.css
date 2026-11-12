@@ -2,13 +2,16 @@
 
 @theme {
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
-  --color-brand-50: #fff5eb;
-  --color-brand-100: #fde4c8;
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #fde8cf;
+  --color-brand-200: #fbd0a0;
+  --color-brand-500: #f08a2c;
   --color-brand-600: #e87817;
   --color-brand-700: #c4600b;
   --color-brand-800: #9c4b07;
   --color-brand-900: #6f3505;
   --color-sun: #f5c400;
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.04), 0 4px 16px -6px rgb(28 25 23 / 0.08);
 }
 
 html {
@@ -16,34 +19,51 @@ html {
 }
 
 body {
-  background: #f6f5f3;
+  background: #f7f6f4;
   color: #1c1917;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-brand-100);
 }
 
 .btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700 disabled:opacity-50;
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700 disabled:cursor-not-allowed disabled:opacity-50;
 }
 .btn-primary {
-  @apply bg-brand-700 text-white hover:bg-brand-800;
+  @apply bg-brand-700 text-white shadow-sm shadow-brand-900/20 hover:bg-brand-800 active:scale-[0.98];
 }
 .btn-secondary {
-  @apply bg-white text-stone-800 ring-1 ring-stone-300 hover:bg-stone-50;
+  @apply bg-white text-stone-800 ring-1 ring-stone-200 hover:bg-stone-50 hover:ring-stone-300;
 }
 .btn-danger {
   @apply bg-white text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50;
 }
 .input {
-  @apply block w-full rounded-md border-0 bg-white px-3 py-2 text-sm text-stone-900 ring-1 ring-stone-300 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-700 focus:outline-none;
+  @apply block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-stone-900 ring-1 ring-stone-200 transition placeholder:text-stone-400 hover:ring-stone-300 focus:ring-2 focus:ring-brand-600 focus:outline-none;
 }
 .label {
   @apply mb-1 block text-sm font-medium text-stone-700;
 }
 .card {
-  @apply rounded-lg bg-white ring-1 ring-stone-200;
+  @apply rounded-2xl bg-white shadow-card ring-1 ring-stone-200/70;
+}
+.card-title {
+  @apply border-b border-stone-100 px-5 py-3.5 text-[15px] font-semibold tracking-tight;
 }
 .th {
-  @apply px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-stone-500 uppercase;
+  @apply px-4 py-3 text-left text-[11px] font-semibold tracking-wider text-stone-500 uppercase;
 }
 .td {
-  @apply px-4 py-3 align-top text-sm text-stone-800;
+  @apply px-4 py-3.5 align-top text-sm text-stone-800;
+}
+.chip {
+  @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ring-1 transition;
+}
+.chip-off {
+  @apply bg-white text-stone-700 ring-stone-200 hover:bg-stone-50 hover:ring-stone-300;
+}
+.chip-on {
+  @apply bg-stone-900 text-white ring-stone-900;
 }

@@ -1,17 +1,10 @@
 import "server-only";
 import { appUrl, db, must } from "./db";
-import type { Enrollment, Family, Group, Settings, Student } from "./types";
+import type { Enrollment, Family, Group, PaymentType, Settings, Student } from "./types";
 import { sendEmail, type SendResult } from "./mailer";
 import { coursPhrase, parseGroupCode, subjectLabel } from "./labels";
-import {
-  classesFuteesWelcome,
-  reminderEmail,
-  reminderSms,
-  thanksEmail,
-  tutoratWelcome,
-  vaAlertEmail,
-  type PendingItem,
-} from "./emails";
+import { reminderEmail, reminderSms, thanksEmail, vaAlertEmail, welcomeEmail } from "./emails";
+import { getTemplate } from "./email-store";
 
 /** Hours before the first reminder, then before the call task. */
 export const REMINDER_AFTER_H = 24;
@@ -95,6 +88,17 @@ export interface NewStudentInput {
   end_date: string;
   closer_name: string;
   group_codes: string[];
+  payment_type?: PaymentType | null;
+  payment_amount?: number | null;
+}
+
+/** Validates the optional payment fields. Returns a French error message or null. */
+export function checkPayment(type: string | null | undefined, amount: number | null | undefined): string | null {
+  if (!type && (amount == null || Number.isNaN(amount))) return null;
+  if (type !== "mensuel" && type !== "unique") return "Choisissez le type de paiement (mensuel ou unique).";
+  if (amount == null || !Number.isFinite(amount)) return "Indiquez le montant du paiement.";
+  if (amount < 0 || amount > 100000) return "Le montant du paiement doit être entre 0 $ et 100 000 $.";
+  return null;
 }
 
 export async function createStudent(input: NewStudentInput): Promise<string> {
@@ -103,6 +107,8 @@ export async function createStudent(input: NewStudentInput): Promise<string> {
   if (!input.first_name.trim()) throw new Error("Le prénom de l'enfant est requis.");
   const codes = [...new Set(input.group_codes.filter(Boolean))];
   if (codes.length === 0) throw new Error("Choisissez au moins un groupe.");
+  const payErr = checkPayment(input.payment_type, input.payment_amount);
+  if (payErr) throw new Error(payErr);
 
   const groups = must(await db().from("groups").select("*").in("code", codes), "Groupes") as Group[];
   const seenSubjects = new Set<string>();
@@ -149,6 +155,8 @@ export async function createStudent(input: NewStudentInput): Promise<string> {
         start_date: input.start_date || null,
         end_date: input.end_date || null,
         closer_name: input.closer_name.trim() || null,
+        payment_type: input.payment_type || null,
+        payment_amount: input.payment_type ? Math.round((input.payment_amount ?? 0) * 100) / 100 : null,
       })
       .select("*")
       .single(),
@@ -165,39 +173,63 @@ export async function createStudent(input: NewStudentInput): Promise<string> {
     "Inscriptions aux groupes",
   ) as Enrollment[];
 
-  for (const e of enrollments) {
-    await sendWelcome(e, student, family, groups.find((g) => g.code === e.group_code)!, now);
-  }
+  await sendWelcomes(enrollments, student, family, groups, now);
   return student.id;
 }
 
-async function sendWelcome(e: Enrollment, s: Student, f: Family, g: Group, now: Date) {
-  const mail = g.program === "tutorat" ? tutoratWelcome(g, s, confirmUrl(e.confirm_token)) : classesFuteesWelcome(g, s, confirmUrl(e.confirm_token));
-  await recordMessage({
-    student_id: s.id,
-    enrollment_id: e.id,
-    channel: "email",
-    kind: "bienvenue",
-    to_address: f.parent_email,
-    subject: mail.subject,
-    body_html: mail.html,
-    body_text: mail.text,
-    at: now,
-  });
-  must(
-    await db()
-      .from("enrollments")
-      .update({ status: "envoye", welcome_sent_at: now.toISOString(), next_action_at: new Date(now.getTime() + REMINDER_AFTER_H * HOUR).toISOString() })
-      .eq("id", e.id),
-    "Mise à jour de l'inscription",
-  );
-  await logEvent(s.id, e.id, "courriel", `Courriel de bienvenue envoyé (${g.code}) à ${f.parent_email}`, now);
+/**
+ * Sends the welcome email(s) for these enrollments: ONE email per program,
+ * covering every subject of the child in that program (usually just one email).
+ * Its button confirms all of the child's pending enrollments at once.
+ */
+async function sendWelcomes(enrollments: Enrollment[], s: Student, f: Family, groups: Group[], now: Date) {
+  const byProgram = new Map<Group["program"], { enrollments: Enrollment[]; groups: Group[] }>();
+  for (const e of enrollments) {
+    const g = groups.find((x) => x.code === e.group_code);
+    if (!g) continue;
+    const entry = byProgram.get(g.program) ?? { enrollments: [], groups: [] };
+    entry.enrollments.push(e);
+    entry.groups.push(g);
+    byProgram.set(g.program, entry);
+  }
+  for (const [program, entry] of byProgram) {
+    const tpl = await getTemplate(program === "tutorat" ? "bienvenue_tutorat" : "bienvenue_classes_futees");
+    const mail = welcomeEmail(tpl, program, s, entry.groups, confirmUrl(entry.enrollments[0].confirm_token));
+    await recordMessage({
+      student_id: s.id,
+      enrollment_id: entry.enrollments[0].id,
+      channel: "email",
+      kind: "bienvenue",
+      to_address: f.parent_email,
+      subject: mail.subject,
+      body_html: mail.html,
+      body_text: mail.text,
+      at: now,
+    });
+    for (const e of entry.enrollments) {
+      must(
+        await db()
+          .from("enrollments")
+          .update({ status: "envoye", welcome_sent_at: now.toISOString(), next_action_at: new Date(now.getTime() + REMINDER_AFTER_H * HOUR).toISOString() })
+          .eq("id", e.id),
+        "Mise à jour de l'inscription",
+      );
+    }
+    await logEvent(s.id, null, "courriel", `Courriel de bienvenue envoyé (${entry.groups.map((g) => g.code).join(", ")}) à ${f.parent_email}`, now);
+  }
 }
 
+/** Re-sends the combined welcome email for the program of this enrollment (all its unconfirmed subjects). */
 export async function resendWelcome(enrollmentId: string) {
   const e = must(await db().from("enrollments").select("*, student:students(*, family:families(*)), group:groups(*)").eq("id", enrollmentId).single(), "Inscription") as EnrollmentFull;
+  const siblings = must(
+    await db().from("enrollments").select("*, group:groups(*)").eq("student_id", e.student_id).neq("status", "confirme").neq("status", "termine"),
+    "Inscriptions",
+  ) as (Enrollment & { group: Group })[];
+  const same = siblings.filter((x) => x.group.program === e.group.program);
+  const list = same.length ? same : [e];
   const now = await demoNow();
-  await sendWelcome(e, e.student, e.student.family, e.group, now);
+  await sendWelcomes(list, e.student, e.student.family, list.map((x) => x.group ?? e.group), now);
 }
 
 /* ------------------------------------------------------------------ */
@@ -206,47 +238,87 @@ export async function resendWelcome(enrollmentId: string) {
 
 type EnrollmentFull = Enrollment & { group: Group; student: Student & { family: Family } };
 
-export async function lookupToken(token: string): Promise<{ status: string; student: string; subject: string; cours: string; code: string } | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(token)) return null;
-  const e = (await db().from("enrollments").select("status, student:students(first_name), group:groups(code, subject)").eq("confirm_token", token).maybeSingle()).data as unknown as
-    | { status: string; student: { first_name: string }; group: { code: string; subject: Group["subject"] } }
-    | null;
-  if (!e) return null;
-  return { status: e.status, student: e.student.first_name, subject: subjectLabel[e.group.subject], cours: coursPhrase([e.group.subject]), code: e.group.code };
+export interface TokenInfo {
+  /** True when every pending subject of the child is confirmed. */
+  confirmed: boolean;
+  student: string;
+  /** Subject labels the confirmation covers, e.g. ["Écriture", "Mathématiques"]. */
+  subjects: string[];
+  codes: string[];
+  cours: string;
 }
 
-export async function confirmByToken(token: string, via: "bouton" | "manuel" | "reponse"): Promise<{ ok: boolean; already?: boolean; student?: string; subject?: string; code?: string }> {
+/** Everything the public confirmation page needs; null for an unknown or malformed token. */
+export async function lookupToken(token: string): Promise<TokenInfo | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(token)) return null;
+  const hit = (await db().from("enrollments").select("student_id, student:students(first_name)").eq("confirm_token", token).maybeSingle()).data as unknown as
+    | { student_id: string; student: { first_name: string } }
+    | null;
+  if (!hit) return null;
+  const all = ((await db().from("enrollments").select("status, group:groups(code, subject)").eq("student_id", hit.student_id)).data ?? []) as unknown as {
+    status: string;
+    group: { code: string; subject: Group["subject"] };
+  }[];
+  // A token confirms every subject of the child that is still open, plus the ones already confirmed.
+  const covered = all.filter((e) => e.status !== "termine");
+  const subjects = [...new Set(covered.map((e) => e.group.subject))];
+  return {
+    confirmed: covered.length > 0 && covered.every((e) => e.status === "confirme"),
+    student: hit.student.first_name,
+    subjects: subjects.map((x) => subjectLabel[x]),
+    codes: covered.map((e) => e.group.code),
+    cours: coursPhrase(subjects),
+  };
+}
+
+const OPEN_STATUSES = ["en_attente", "envoye", "relance", "a_appeler"] as const;
+
+/**
+ * Confirms receipt. One welcome email covers all of a child's subjects, so one
+ * click (or one manual confirmation) confirms every open enrollment of that
+ * child and sends a single thank-you. Safe to call twice: only enrollments that
+ * were really still open are updated, so a double click sends no second email.
+ */
+export async function confirmByToken(token: string, via: "bouton" | "manuel" | "reponse"): Promise<{ ok: boolean; already?: boolean; student?: string }> {
   if (!/^[0-9a-f-]{36}$/i.test(token)) return { ok: false };
   const res = await db().from("enrollments").select("*, student:students(*, family:families(*)), group:groups(*)").eq("confirm_token", token).maybeSingle();
   const e = res.data as EnrollmentFull | null;
   if (!e) return { ok: false };
-  const base = { student: e.student.first_name, subject: subjectLabel[e.group.subject], code: e.group.code };
-  if (e.status === "confirme") return { ok: true, already: true, ...base };
 
   const now = await demoNow();
-  must(
+  const updated = must(
     await db()
       .from("enrollments")
       .update({ status: "confirme", confirmed_at: now.toISOString(), confirmed_via: via, next_action_at: null })
-      .eq("id", e.id),
+      .eq("student_id", e.student_id)
+      .in("status", [...OPEN_STATUSES])
+      .select("id, group:groups(*)"),
     "Confirmation",
-  );
-  const how = via === "bouton" ? "par le parent (bouton du courriel)" : via === "reponse" ? "par réponse du parent" : "manuellement par l'équipe";
-  await logEvent(e.student.id, e.id, "confirmation", `Confirmé ${how} (${e.group.code})`, now);
+  ) as unknown as { id: string; group: Group }[];
+  if (updated.length === 0) return { ok: true, already: true, student: e.student.first_name };
 
-  const mail = thanksEmail(e.group, e.student);
-  await recordMessage({
-    student_id: e.student.id,
-    enrollment_id: e.id,
-    channel: "email",
-    kind: "merci",
-    to_address: e.student.family.parent_email,
-    subject: mail.subject,
-    body_html: mail.html,
-    body_text: mail.text,
-    at: now,
-  });
-  return { ok: true, ...base };
+  const groups = updated.map((u) => u.group);
+  const how = via === "bouton" ? "par le parent (bouton du courriel)" : via === "reponse" ? "par réponse du parent" : "manuellement par l'équipe";
+  await logEvent(e.student.id, null, "confirmation", `Confirmé ${how} (${groups.map((g) => g.code).join(", ")})`, now);
+
+  // The confirmation is already saved: nothing below may turn it into an error for the parent.
+  try {
+    const mail = thanksEmail(await getTemplate("merci"), e.student, groups);
+    await recordMessage({
+      student_id: e.student.id,
+      enrollment_id: updated[0].id,
+      channel: "email",
+      kind: "merci",
+      to_address: e.student.family.parent_email,
+      subject: mail.subject,
+      body_html: mail.html,
+      body_text: mail.text,
+      at: now,
+    });
+  } catch (err) {
+    console.error("Merci email failed", err);
+  }
+  return { ok: true, student: e.student.first_name };
 }
 
 /* ------------------------------------------------------------------ */
@@ -280,12 +352,13 @@ export async function processDue(): Promise<{ reminders: number; escalations: nu
   for (const { remind, escalate } of byStudent.values()) {
     if (remind.length) {
       const s = remind[0].student;
-      const items: PendingItem[] = remind.map((e) => ({ group: e.group, confirmUrl: confirmUrl(e.confirm_token) }));
-      const mail = reminderEmail(s, items);
+      const groups = remind.map((e) => e.group);
+      const link = confirmUrl(remind[0].confirm_token);
+      const mail = reminderEmail(await getTemplate("relance"), s, groups, link);
       await recordMessage({ student_id: s.id, channel: "email", kind: "relance", to_address: s.family.parent_email, subject: mail.subject, body_html: mail.html, body_text: mail.text, at: now });
       const withSms = settings.sms_enabled && !!s.family.parent_phone;
       if (withSms) {
-        await recordMessage({ student_id: s.id, channel: "sms", kind: "sms_relance", to_address: s.family.parent_phone!, body_text: reminderSms(s, items[0].confirmUrl), at: now });
+        await recordMessage({ student_id: s.id, channel: "sms", kind: "sms_relance", to_address: s.family.parent_phone!, body_text: reminderSms(s, link), at: now });
       }
       for (const e of remind) {
         await db()
@@ -298,8 +371,8 @@ export async function processDue(): Promise<{ reminders: number; escalations: nu
     }
     if (escalate.length) {
       const s = escalate[0].student;
-      const codes = escalate.map((e) => e.group.code);
-      const mail = vaAlertEmail(s, { name: s.family.parent_name, email: s.family.parent_email, phone: s.family.parent_phone }, codes, `${appUrl()}/eleves/${s.id}`);
+      const codes = escalate.map((e) => e.group_code);
+      const mail = vaAlertEmail(await getTemplate("alerte_va"), s, { name: s.family.parent_name, email: s.family.parent_email, phone: s.family.parent_phone }, escalate.map((e) => e.group), `${appUrl()}/eleves/${s.id}`);
       await recordMessage({ student_id: s.id, channel: "email", kind: "alerte_va", to_address: settings.va_email, subject: mail.subject, body_html: mail.html, body_text: mail.text, at: now });
       for (const e of escalate) {
         await db().from("enrollments").update({ status: "a_appeler", escalated_at: now.toISOString(), next_action_at: null }).eq("id", e.id);

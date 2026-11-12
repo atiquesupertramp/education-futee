@@ -2,6 +2,7 @@ export type Program = "tutorat" | "classes_futees";
 export type Subject = "lecture" | "ecriture" | "math";
 export type EnrollmentStatus = "en_attente" | "envoye" | "relance" | "a_appeler" | "confirme" | "termine";
 export type MembershipStatus = "actif" | "en_pause" | "termine";
+export type PaymentType = "mensuel" | "unique";
 
 export interface Group {
   code: string;
@@ -37,6 +38,8 @@ export interface Student {
   membership_status: MembershipStatus;
   closer_name: string | null;
   notes: string | null;
+  payment_type: PaymentType | null;
+  payment_amount: number | string | null;
   created_at: string;
 }
 

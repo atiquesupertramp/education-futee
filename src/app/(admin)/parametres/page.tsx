@@ -52,10 +52,10 @@ export default async function SettingsPage() {
 
       <section className="card space-y-2 p-6 text-sm">
         <h2 className="font-semibold">Règles de suivi</h2>
-        <p>1. À l&apos;inscription : un courriel de bienvenue par matière, avec un bouton de confirmation.</p>
-        <p>2. Sans confirmation après {REMINDER_AFTER_H} h : un rappel par courriel{s.sms_enabled ? " et un SMS court" : ""} (un seul par enfant, pour toutes les matières non confirmées).</p>
+        <p>1. À l&apos;inscription : un seul courriel de bienvenue par programme, qui regroupe toutes les matières de l&apos;enfant (horaires, enseignantes, liens Zoom), avec un seul bouton de confirmation.</p>
+        <p>2. Sans confirmation après {REMINDER_AFTER_H} h : un rappel par courriel{s.sms_enabled ? " et un SMS court" : ""} (un seul par enfant).</p>
         <p>3. Toujours rien {ESCALATE_AFTER_H} h plus tard : la famille passe dans « À appeler » et l&apos;adjointe reçoit une alerte.</p>
-        <p>4. À la confirmation : courriel de remerciement, et les relances s&apos;arrêtent pour cette matière.</p>
+        <p>4. À la confirmation (un clic confirme toutes les matières) : un courriel de remerciement, et les relances s&apos;arrêtent. Le texte de chaque courriel se modifie dans « Modèles de courriel ».</p>
         <p className="text-stone-500">En production, les relances sont vérifiées automatiquement chaque jour. Dans la démo, utilisez « Avancer de 24 h » en haut de l&apos;écran.</p>
       </section>
 

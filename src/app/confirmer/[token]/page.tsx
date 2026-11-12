@@ -1,53 +1,40 @@
-import { redirect } from "next/navigation";
-import { confirmByToken, lookupToken } from "@/lib/onboarding";
+import { lookupToken } from "@/lib/onboarding";
+import { ConfirmForm, Thanks } from "./confirm-form";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Confirmation · Éducation Futée", robots: { index: false } };
 
-async function confirmAction(fd: FormData) {
-  "use server";
-  const token = String(fd.get("token") ?? "");
-  await confirmByToken(token, "bouton");
-  redirect(`/confirmer/${token}?ok=1`);
-}
-
-export default async function ConfirmPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ ok?: string }> }) {
+export default async function ConfirmPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const { ok } = await searchParams;
-  const r = await lookupToken(token);
-  const confirmed = r?.status === "confirme";
+  let r = null;
+  let failed = false;
+  try {
+    r = await lookupToken(token);
+  } catch (e) {
+    console.error("Confirmation lookup failed", e);
+    failed = true;
+  }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-brand-50 px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-brand-100">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-brand-50 to-white px-4 py-12">
+      <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-xl shadow-brand-900/5 ring-1 ring-stone-200/70">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="Éducation Futée" className="mx-auto mb-6 w-32" />
-        {!r ? (
+        {failed ? (
           <>
-            <h1 className="text-2xl font-bold text-stone-900">Lien invalide</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900">Un petit souci de notre côté</h1>
+            <p className="mt-3 text-stone-700">Veuillez réessayer dans un instant en rouvrant le lien du courriel. Si le problème persiste, écrivez-nous à info@educationfutee.com.</p>
+          </>
+        ) : !r ? (
+          <>
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900">Lien invalide</h1>
             <p className="mt-3 text-stone-700">Ce lien de confirmation n&apos;est plus valide. Écrivez-nous à info@educationfutee.com et nous ferons le suivi.</p>
           </>
-        ) : confirmed ? (
-          <>
-            <h1 className="text-2xl font-bold text-stone-900">{ok ? "Merci, c'est confirmé! 💛" : "C'est déjà confirmé!"}</h1>
-            <p className="mt-3 text-stone-700">
-              Nous avons bien noté que vous avez reçu les informations <strong>du {r.cours.replace(/^le /, "")}</strong> de {r.student} (groupe {r.code}).
-            </p>
-            <p className="mt-4 text-sm text-stone-500">Prochaine étape : surveillez vos courriels pour l&apos;invitation à la plateforme éducative. Vous pouvez fermer cette page.</p>
-          </>
+        ) : r.confirmed ? (
+          <Thanks student={r.student} cours={r.cours} codes={r.codes} />
         ) : (
-          <>
-            <h1 className="text-2xl font-bold text-stone-900">Confirmez la réception</h1>
-            <p className="mt-3 text-stone-700">
-              <strong>{r.subject}</strong> pour {r.student} (groupe {r.code}).
-            </p>
-            <p className="mt-2 text-sm text-stone-500">En confirmant, vous nous indiquez avoir bien reçu et lu le courriel de bienvenue.</p>
-            <form action={confirmAction} className="mt-6">
-              <input type="hidden" name="token" value={token} />
-              <button className="btn btn-primary w-full py-3 text-base">Je confirme la réception</button>
-            </form>
-          </>
+          <ConfirmForm token={token} student={r.student} cours={r.cours} codes={r.codes} />
         )}
       </div>
     </main>

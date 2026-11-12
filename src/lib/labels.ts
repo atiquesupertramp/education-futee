@@ -1,4 +1,4 @@
-import type { EnrollmentStatus, MembershipStatus, Program, Subject } from "./types";
+import type { EnrollmentStatus, MembershipStatus, PaymentType, Program, Subject } from "./types";
 
 export const SUBJECTS: Subject[] = ["lecture", "ecriture", "math"];
 
@@ -81,3 +81,22 @@ export function fmtDate(iso: string | null | undefined): string {
   const d = iso.length === 10 ? new Date(iso + "T12:00:00") : new Date(iso);
   return new Intl.DateTimeFormat("fr-CA", { timeZone: TZ, day: "numeric", month: "long", year: "numeric" }).format(d);
 }
+
+export const paymentTypeLabel: Record<PaymentType, string> = {
+  mensuel: "Paiement mensuel",
+  unique: "Paiement unique",
+};
+
+const cad = new Intl.NumberFormat("fr-CA", { style: "currency", currency: "CAD" });
+
+/** "49,00 $" (CAD, French Canadian format). Accepts the numeric strings Supabase returns. */
+export function fmtMoney(v: number | string | null | undefined): string {
+  const n = typeof v === "string" ? Number(v) : v;
+  return n == null || !Number.isFinite(n) ? "–" : cad.format(n);
+}
+
+/** Numeric value of a payment amount, or 0 when missing. */
+export const moneyValue = (v: number | string | null | undefined): number => {
+  const n = typeof v === "string" ? Number(v) : v;
+  return n != null && Number.isFinite(n) ? n : 0;
+};
