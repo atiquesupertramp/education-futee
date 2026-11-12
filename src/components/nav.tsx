@@ -14,6 +14,7 @@ const LINKS: { href: string; label: string; icon: ReactNode }[] = [
   { href: "/", label: "Tableau de bord", icon: icon("M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10") },
   { href: "/eleves/nouveau", label: "Nouvel élève", icon: icon("M12 5v14M5 12h14") },
   { href: "/eleves", label: "Élèves", icon: icon("M16 19v-1a4 4 0 00-4-4H8a4 4 0 00-4 4v1M10 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM20 19v-1a3.5 3.5 0 00-2.5-3.3M16.5 4.2a3.5 3.5 0 010 6.6") },
+  { href: "/eleves/import", label: "Importer des élèves", icon: icon("M12 16V4M7 9l5-5 5 5M4 20h16") },
   { href: "/a-appeler", label: "À appeler", icon: icon("M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z") },
   { href: "/messages", label: "Boîte d'envoi", icon: icon("M3 7l9 6 9-6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z") },
   { href: "/modeles", label: "Modèles de courriel", icon: icon("M4 5h16M4 10h16M4 15h10M4 20h7") },
@@ -24,7 +25,7 @@ const LINKS: { href: string; label: string; icon: ReactNode }[] = [
 export function Nav({ callCount }: { callCount: number }) {
   const path = usePathname();
   const isActive = (href: string) =>
-    href === "/" ? path === "/" : href === "/eleves" ? path === "/eleves" || (path.startsWith("/eleves/") && path !== "/eleves/nouveau") : path.startsWith(href);
+    href === "/" ? path === "/" : href === "/eleves" ? path === "/eleves" || (path.startsWith("/eleves/") && path !== "/eleves/nouveau" && !path.startsWith("/eleves/import")) : path.startsWith(href);
   return (
     <nav className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0" aria-label="Navigation principale">
       {LINKS.map((l) => {

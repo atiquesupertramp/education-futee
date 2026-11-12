@@ -90,6 +90,34 @@ export interface NewStudentInput {
   group_codes: string[];
   payment_type?: PaymentType | null;
   payment_amount?: number | null;
+  /** Only used by the bulk import. Defaults to "actif". */
+  membership_status?: Student["membership_status"];
+  notes?: string;
+}
+
+/** Group rules shared by the form and the bulk import. Returns a French error message or null. */
+export function checkGroupChoice(codes: string[], cycle: number, groups: Group[]): string | null {
+  const seenSubjects = new Set<string>();
+  for (const code of codes) {
+    const g = groups.find((x) => x.code === code);
+    if (!g) return `Groupe introuvable : ${code}`;
+    if (!g.active) return `Le groupe ${code} est inactif.`;
+    if (g.cycle !== cycle) return `Le groupe ${code} est au ${g.cycle}e cycle, mais l'élève est au ${cycle}e cycle.`;
+    const key = `${g.program}-${g.subject}`;
+    if (seenSubjects.has(key)) return `Un seul groupe par matière : ${subjectLabel[g.subject]} est choisi deux fois.`;
+    seenSubjects.add(key);
+  }
+  return null;
+}
+
+export interface EnrollOptions {
+  /** Send the welcome email(s) and start the follow-up timers (the normal flow). */
+  welcome: boolean;
+  /**
+   * Bulk import only (welcome = false). "confirme": the family is already onboarded.
+   * "en_attente": nothing is sent and no timer starts; staff can send the welcome later from the profile.
+   */
+  importStatus?: "confirme" | "en_attente";
 }
 
 /** Validates the optional payment fields. Returns a French error message or null. */
@@ -101,7 +129,7 @@ export function checkPayment(type: string | null | undefined, amount: number | n
   return null;
 }
 
-export async function createStudent(input: NewStudentInput): Promise<string> {
+export async function createStudent(input: NewStudentInput, opts: EnrollOptions = { welcome: true }): Promise<string> {
   const email = input.parent_email.trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Courriel du parent invalide.");
   if (!input.first_name.trim()) throw new Error("Le prénom de l'enfant est requis.");
@@ -111,22 +139,15 @@ export async function createStudent(input: NewStudentInput): Promise<string> {
   if (payErr) throw new Error(payErr);
 
   const groups = must(await db().from("groups").select("*").in("code", codes), "Groupes") as Group[];
-  const seenSubjects = new Set<string>();
-  for (const code of codes) {
-    const g = groups.find((x) => x.code === code);
-    if (!g) throw new Error(`Groupe introuvable : ${code}`);
-    if (!g.active) throw new Error(`Le groupe ${code} est inactif.`);
-    if (g.cycle !== input.cycle) throw new Error(`Le groupe ${code} est au ${g.cycle}e cycle, mais l'élève est au ${input.cycle}e cycle.`);
-    const key = `${g.program}-${g.subject}`;
-    if (seenSubjects.has(key)) throw new Error(`Un seul groupe par matière : ${subjectLabel[g.subject]} est choisi deux fois.`);
-    seenSubjects.add(key);
-  }
+  const groupErr = checkGroupChoice(codes, input.cycle, groups);
+  if (groupErr) throw new Error(groupErr);
 
   const now = await demoNow();
 
   // One family per parent email: a second child reuses the same family.
   const existing = must(await db().from("families").select("*").ilike("parent_email", email).limit(1), "Famille") as Family[];
   let family: Family;
+  let familyCreated = false;
   if (existing[0]) {
     family = existing[0];
     const patch: Partial<Family> = {};
@@ -142,9 +163,15 @@ export async function createStudent(input: NewStudentInput): Promise<string> {
         .single(),
       "Création de la famille",
     ) as Family;
+    familyCreated = true;
   }
+  const dropNewFamily = async () => {
+    if (familyCreated) await db().from("families").delete().eq("id", family.id);
+  };
 
-  const student = must(
+  let student: Student;
+  try {
+  student = must(
     await db()
       .from("students")
       .insert({
@@ -155,6 +182,8 @@ export async function createStudent(input: NewStudentInput): Promise<string> {
         start_date: input.start_date || null,
         end_date: input.end_date || null,
         closer_name: input.closer_name.trim() || null,
+        membership_status: input.membership_status ?? "actif",
+        notes: input.notes?.trim() || null,
         payment_type: input.payment_type || null,
         payment_amount: input.payment_type ? Math.round((input.payment_amount ?? 0) * 100) / 100 : null,
       })
@@ -162,18 +191,47 @@ export async function createStudent(input: NewStudentInput): Promise<string> {
       .single(),
     "Création de l'élève",
   ) as Student;
+  } catch (err) {
+    await dropNewFamily();
+    throw err;
+  }
 
-  await logEvent(student.id, null, "inscription", `Inscrit par ${input.closer_name.trim() || "la conseillère"} : ${codes.join(", ")}`, now);
+  let enrollments: Enrollment[];
+  try {
+    await logEvent(
+      student.id,
+      null,
+      opts.welcome ? "inscription" : "import",
+      opts.welcome
+        ? `Inscrit par ${input.closer_name.trim() || "la conseillère"} : ${codes.join(", ")}`
+        : `Importé en lot (aucun courriel envoyé) : ${codes.join(", ")}`,
+      now,
+    );
 
-  const enrollments = must(
-    await db()
-      .from("enrollments")
-      .insert(codes.map((code) => ({ student_id: student.id, group_code: code })))
-      .select("*"),
-    "Inscriptions aux groupes",
-  ) as Enrollment[];
+    enrollments = must(
+      await db()
+        .from("enrollments")
+        .insert(
+          codes.map((code) => ({
+            student_id: student.id,
+            group_code: code,
+            // Imported families already onboarded: confirmed, so no follow-up ever fires for them.
+            ...(!opts.welcome && opts.importStatus === "confirme" ? { status: "confirme", confirmed_at: now.toISOString(), confirmed_via: "import" } : {}),
+          })),
+        )
+        .select("*"),
+      "Inscriptions aux groupes",
+    ) as Enrollment[];
 
-  await sendWelcomes(enrollments, student, family, groups, now);
+  } catch (err) {
+    // Do not leave a half-created student behind (cascades to enrollments and events).
+    await db().from("students").delete().eq("id", student.id);
+    await dropNewFamily();
+    throw err;
+  }
+
+  // The bulk import never sends anything and never starts a follow-up timer.
+  if (opts.welcome) await sendWelcomes(enrollments, student, family, groups, now);
   return student.id;
 }
 

@@ -41,7 +41,12 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         title="Élèves"
         subtitle={`${scoped.length} élève${scoped.length > 1 ? "s" : ""}${scoped.length !== all.length ? ` sur ${all.length}` : ""}`}
-        actions={<Link href="/eleves/nouveau" className="btn btn-primary">+ Ajouter un élève</Link>}
+        actions={
+          <>
+            <Link href="/eleves/import" className="btn btn-secondary">Importer en lot</Link>
+            <Link href="/eleves/nouveau" className="btn btn-primary">+ Ajouter un élève</Link>
+          </>
+        }
       />
 
       <FilterBar action="/eleves" filters={filters} groups={gRes.data ?? []} keep={status.key === "tous" ? {} : { filtre: status.key }} withSearch withPayment />

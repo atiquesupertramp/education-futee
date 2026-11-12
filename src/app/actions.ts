@@ -19,6 +19,8 @@ import { TEMPLATES, defaultBody, isTemplateKey } from "@/lib/email-defaults";
 import { validateTemplate } from "@/lib/email-engine";
 import { sampleEmail } from "@/lib/emails";
 import type { PaymentType } from "@/lib/types";
+import { decodeFile, prepareImport, runImport, type ImportResult } from "@/lib/bulk-import";
+import { MAX_IMPORT_BYTES } from "@/lib/import-fields";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
@@ -232,4 +234,63 @@ export async function resetTemplateAction(_prev: TemplateState, fd: FormData): P
   if (res.error) return { error: "Impossible de restaurer : " + res.error.message };
   revalidatePath("/modeles", "layout");
   return { saved: true, subject: TEMPLATES[key].subject, body: defaultBody(key) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Bulk import (never sends an email or SMS)                           */
+/* ------------------------------------------------------------------ */
+
+export interface ImportPreview {
+  rows: { line: number; label: string; codes: string[]; state: "ok" | "erreur" | "doublon"; message?: string }[];
+  ignoredColumns: string[];
+  ok: number;
+  errors: number;
+  duplicates: number;
+}
+export type ImportState = { error?: string; preview?: ImportPreview; result?: ImportResult } | undefined;
+
+async function readImportFile(fd: FormData): Promise<{ text: string } | { error: string }> {
+  const file = fd.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choisissez un fichier CSV." };
+  if (file.size > MAX_IMPORT_BYTES) return { error: "Le fichier est trop volumineux (maximum 900 Ko). Divisez-le en plusieurs parties." };
+  if (!/\.(csv|txt)$/i.test(file.name)) return { error: "Le fichier doit être au format CSV (.csv). Dans Excel : Fichier, Enregistrer sous, « CSV UTF-8 »." };
+  return { text: decodeFile(await file.arrayBuffer()) };
+}
+
+/** Step 1: validates the file and shows what would happen. Writes nothing. */
+export async function previewImportAction(_prev: ImportState, fd: FormData): Promise<ImportState> {
+  await requireAuth();
+  try {
+    const f = await readImportFile(fd);
+    if ("error" in f) return { error: f.error };
+    const p = await prepareImport(f.text);
+    if (p.fatal) return { error: p.fatal };
+    return {
+      preview: {
+        rows: p.rows.map((r) => ({ line: r.line, label: r.label, codes: r.codes, state: r.state, message: r.message })),
+        ignoredColumns: p.ignoredColumns,
+        ok: p.rows.filter((r) => r.state === "ok").length,
+        errors: p.rows.filter((r) => r.state === "erreur").length,
+        duplicates: p.rows.filter((r) => r.state === "doublon").length,
+      },
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Fichier illisible." };
+  }
+}
+
+/** Step 2: imports the valid rows. No welcome email, no reminder, no SMS. */
+export async function runImportAction(_prev: ImportState, fd: FormData): Promise<ImportState> {
+  await requireAuth();
+  try {
+    const f = await readImportFile(fd);
+    if ("error" in f) return { error: f.error };
+    const status = str(fd, "import_status") === "en_attente" ? "en_attente" : "confirme";
+    const result = await runImport(f.text, status);
+    if (result.fatal) return { error: result.fatal };
+    revalidatePath("/", "layout");
+    return { result };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Import impossible." };
+  }
 }
